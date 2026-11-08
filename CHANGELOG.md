@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix: after Download, a CPU threads change or a sync from another replica drops the loaded model, the service now reloads it in the background (when "Load the model at start" is on) instead of showing "Starting" on `/admin/` until the first request.
 - Breaking: startup, warm-up and requests load downloaded weights only. First run: open `/admin/` → Updates → Download; health/admin remain available and inference returns 503 until ready.
 - Download now fetches the pinned tokenizer; local `s1-mini:f16` weights remain an operator GGUF import, with no online model version to compare. Registry-backed alternate tags pull only on Download.
 
