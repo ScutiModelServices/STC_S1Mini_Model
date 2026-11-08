@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- New `SERVICE_OLLAMA_PARALLEL` (default 2): generations one replica runs at once, like CNV_MiniCPM52B_Model. Before, each replica ran one at a time. Set it to the `OLLAMA_NUM_PARALLEL` of your Ollama; the in-flight cap defaults to 4 x this value.
 - Breaking: removed torch backend, transformers/accelerate dependencies, `model`/`dtype` settings (`SERVICE_MODEL`/`SERVICE_DTYPE`). Ollama is now the only backend; the fixed pinned tokenizer uses tokenizers without model weights. Removed settings return 422. `project` remains unsupported (422).
 - Migration: start Ollama and pull/import `SERVICE_OLLAMA_MODEL`. Local URL defaults to `http://127.0.0.1:11434`, Compose to `http://host.docker.internal:11434`; empty URL fails. Health/admin stay available during outages or missing models; normalization returns 503 with a start/pull hint and retries on the next request.
 - Removed unused `stc_s1mini_model_models` volume mount/declaration. Old models volume with HF weights is unused and can be deleted after migration; keep it for rollback to the previous commit. Project model folders are no longer used. Tokens, settings, tokenizer-only cache and update markers remain in `stc_s1mini_model_data`.

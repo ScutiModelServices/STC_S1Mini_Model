@@ -55,7 +55,7 @@ def default_marker() -> Path:
 class S1MiniEngine:
     """Ollama loader and digest/download callables are injectable for tests."""
 
-    def __init__(self, model: str = DEFAULT_MODEL, *, chunk_tokens: int = 800, timeout: float = 120.0,
+    def __init__(self, model: str = DEFAULT_MODEL, *, chunk_tokens: int = 800, timeout: float = 120.0, parallel: int = 1,
                  marker: Path | None = None, loader: Callable[[str], Any] | None = None,
                  cached_sha: Callable[[str], str | None] | None = None,
                  remote_sha: Callable[[str], str] | None = None,
@@ -72,7 +72,8 @@ class S1MiniEngine:
         self._remote_sha_of, self._cached_sha_of, self._download_of = remote_sha, cached_sha, download
         self._base: Any | None = None
         self._load_lock = threading.Lock()
-        self._gate = asyncio.Semaphore(1)
+        self.parallel = max(1, int(parallel))  # generations one replica runs at once; match OLLAMA_NUM_PARALLEL
+        self._gate = asyncio.Semaphore(self.parallel)
         self.generation = 0  # part of the answer cache key; changes whenever the loaded model is dropped
 
     @property

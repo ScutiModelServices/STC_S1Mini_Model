@@ -10,6 +10,7 @@ services:
     environment:
       SERVICE_ADMIN_PASSWORD: ${SERVICE_ADMIN_PASSWORD:-}
       SERVICE_NUM_THREAD: ${SERVICE_NUM_THREAD:-}
+      SERVICE_OLLAMA_PARALLEL: ${SERVICE_OLLAMA_PARALLEL:-2}  # same value as OLLAMA_NUM_PARALLEL on your Ollama
       SERVICE_REPLICAS: ${SERVICE_REPLICAS:-1}  # shown read-only on /admin/
       SERVICE_OLLAMA_URL: ${SERVICE_OLLAMA_URL-http://host.docker.internal:11434}
       SERVICE_OLLAMA_MODEL: ${SERVICE_OLLAMA_MODEL:-s1-mini:f16}

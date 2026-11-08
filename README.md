@@ -79,7 +79,7 @@ uv run pytest
 
 ## Limits worth knowing
 
-- One generation at a time per replica; extra calls wait, and more than the in-flight cap get 429.
+- Up to `SERVICE_OLLAMA_PARALLEL` generations at once per replica (default 2); extra calls wait, and more than the in-flight cap get 429.
 - The rate limit is per replica.
 - A pass has a 120 s timeout. Backend failures return 503 before streaming or an error event after streaming starts.
 - A style that drops end punctuation (`casual`) can leave no full stop between two passes of a long text.

@@ -28,6 +28,7 @@ uv run python src/app.py
 | `SERVICE_ADMIN_PASSWORD` | empty | Unlocks `/admin/` and requires tokens on every call but `/health`. Empty = no auth. |
 | `SERVICE_OLLAMA_URL` | `http://127.0.0.1:11434` | Required URL; empty fails. |
 | `SERVICE_OLLAMA_MODEL` | `s1-mini:f16` | Installed model. |
+| `SERVICE_OLLAMA_PARALLEL` | `2` | Generations one replica runs at once; match `OLLAMA_NUM_PARALLEL` on your Ollama. |
 | `SERVICE_WARM` | `1` | Load the model at start; with `0` the first request pays the load time. |
 | `SERVICE_NUM_THREAD` | empty | Saved display value only; Ollama chooses its own threads. |
 | `SERVICE_MODELS_DIR` | the library's default cache | Local tokenizer cache override through `HF_HOME`; a real `HF_HOME` wins. Does not configure an already-running Ollama server cache. |

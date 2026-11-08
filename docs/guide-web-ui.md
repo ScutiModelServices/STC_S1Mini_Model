@@ -26,7 +26,7 @@ the password and any freshly created token. If browser storage is blocked, sign 
 
 The header shows the service address and a health badge with an icon and text: **Healthy**, **Starting**, or
 **Unreachable**. Health is checked without authentication every 10 seconds while signed in. **Starting** means the model
-has not successfully loaded through Ollama yet. Tiles show model readiness, replicas, parallel generations, CPU threads, and active tokens.
+has not successfully loaded through Ollama yet. Tiles show model readiness, replicas, Ollama parallel requests, CPU threads, and active tokens.
 Use **Theme** to cycle between system, light, and dark appearance; this preference is saved in the browser.
 
 ## Tokens
@@ -60,7 +60,7 @@ Ollama chooses its own threads. Configure Ollama on its host. Saved value beats 
 
 ## Replicas and parallel requests (read-only)
 
-The tiles show replicas and parallel generations from `SERVICE_REPLICAS`; each replica runs one generation at a time.
+The tiles show replicas and parallel generations from `SERVICE_REPLICAS` and `SERVICE_OLLAMA_PARALLEL`: each replica runs that many generations at once (default 2; set it to the `OLLAMA_NUM_PARALLEL` of your Ollama).
 The muted line says **Replicas: N. Change SERVICE_REPLICAS in .env, then rebuild.** The
 page cannot change them. To change, set them in `.env`, then:
 ```bash

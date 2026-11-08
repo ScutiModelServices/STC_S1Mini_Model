@@ -293,3 +293,14 @@ def test_explicit_download_pulls_even_when_local_digest_is_unchanged(server, mon
     assert reply.status_code == 200
     assert {"model": "m", "stream": False} in server[1]
     assert engine.ready is False and engine.generation == 1
+
+
+def test_parallel_comes_from_service_ollama_parallel(monkeypatch):
+    monkeypatch.setenv("SERVICE_OLLAMA_URL", "http://127.0.0.1:11434")
+    monkeypatch.delenv("SERVICE_OLLAMA_PARALLEL", raising=False)
+    assert engine_from_env().parallel == 2
+    monkeypatch.setenv("SERVICE_OLLAMA_PARALLEL", "4")
+    assert engine_from_env().parallel == 4
+    monkeypatch.setenv("SERVICE_OLLAMA_PARALLEL", "0")
+    with pytest.raises(ValueError):
+        engine_from_env()

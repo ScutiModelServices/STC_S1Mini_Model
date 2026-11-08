@@ -19,6 +19,7 @@ Copy `.env.example` to `.env`. Saved admin values beat environment values.
 | `SERVICE_PORT` | `29280` | Host port published by nginx. |
 | `SERVICE_OLLAMA_URL` | `http://host.docker.internal:11434` | Required reachable Ollama address; empty fails. |
 | `SERVICE_OLLAMA_MODEL` | `s1-mini:f16` | Installed model; saved restart setting wins. |
+| `SERVICE_OLLAMA_PARALLEL` | `2` | Generations one replica runs at once; set it to the `OLLAMA_NUM_PARALLEL` of your Ollama. |
 | `SERVICE_REPLICAS` | `1` | API replicas sharing Ollama model memory. |
 | `SERVICE_MEM_LIMIT` | `0` | Optional per-API memory cap; Ollama memory is separate. |
 | `SERVICE_NUM_THREAD` | empty | Saved/displayed only; Ollama chooses its own threads. |

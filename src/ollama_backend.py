@@ -132,6 +132,14 @@ class OllamaLoaded:
             raise EngineError("Ollama stream failed", 503) from None
 
 
+
+def _parallel() -> int:
+    """Generations one replica runs at once: SERVICE_OLLAMA_PARALLEL (default 2), the OLLAMA_NUM_PARALLEL of your Ollama."""
+    raw = os.environ.get("SERVICE_OLLAMA_PARALLEL", "").strip() or "2"
+    if not raw.isdigit() or int(raw) < 1:
+        raise ValueError("SERVICE_OLLAMA_PARALLEL must be a whole number of 1 or more")
+    return int(raw)
+
 def engine_from_env(*, config: Any = None, **options: Any) -> S1MiniEngine:
     """Always use Ollama; saved startup settings win over environment values."""
     def value(name: str, default: str) -> str:
@@ -170,6 +178,7 @@ def engine_from_env(*, config: Any = None, **options: Any) -> S1MiniEngine:
         except Exception:
             raise EngineError("S1-mini tokenizer could not be loaded; retry when its download is available", 503) from None
 
-    engine = S1MiniEngine(model, loader=loader, cached_sha=local_digest,
+    parallel = _parallel()
+    engine = S1MiniEngine(model, loader=loader, parallel=parallel, cached_sha=local_digest,
                          remote_sha=lambda source: local_digest(source) or "", download=pull, **options)
     return engine

@@ -89,7 +89,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
         """Calls this replica lets wait for the model at once; more get 429. 0 = 4."""
         value = config.get("max_inflight") if config else (
             max_inflight if max_inflight is not None else int(os.environ.get("SERVICE_MAX_INFLIGHT") or 0))
-        return value or 4
+        return value or 4 * client.parallel
 
     updates = updates or OllamaUpdates(client.model, cached_sha=lambda: client.cached_sha(), remote_sha=lambda: client.remote_sha(),
                                  download=lambda: client.pull(), unload=lambda: client.unload(),
@@ -287,7 +287,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
             value = os.environ.get(name, "").strip()
             return int(value) if value.isdigit() else None
 
-        return {"replicas": number("SERVICE_REPLICAS"), "parallel": 1}
+        return {"replicas": number("SERVICE_REPLICAS"), "ollama_parallel": client.parallel}
 
     @app.get("/admin/updates", dependencies=[Depends(admin)])
     async def update_status() -> dict[str, Any]:

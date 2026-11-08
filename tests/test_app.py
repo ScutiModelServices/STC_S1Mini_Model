@@ -91,7 +91,7 @@ def test_workers_are_read_only_and_admin_only(monkeypatch):
     monkeypatch.setenv("SERVICE_REPLICAS", "3")
     c = client(admin_password="admin")
     assert c.get("/admin/workers").status_code == 401
-    assert c.get("/admin/workers", headers={"X-Internal-Token": "admin"}).json() == {"replicas": 3, "parallel": 1}
+    assert c.get("/admin/workers", headers={"X-Internal-Token": "admin"}).json() == {"replicas": 3, "ollama_parallel": 1}
 
 
 def test_num_thread_is_reported_and_set_by_the_admin(tmp_path):
@@ -224,6 +224,7 @@ def test_long_input_is_cut_at_sentence_ends_and_joined():
 
 def test_a_model_crash_is_500_and_too_long_is_422():
     class Broken:
+        parallel = 1
         async def normalize(self, *args):
             raise error
 
