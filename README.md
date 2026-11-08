@@ -1,5 +1,7 @@
 # STC_S1Mini_Model
 
+First start: open `/admin/` → **Updates** → **Download**; see [the web UI guide](docs/guide-web-ui.md#updating-the-model-files). Startup and requests load downloaded files only; an empty installation keeps health/admin available and returns 503 for inference. Import the model with [the Ollama guide](docs/ollama.md) before downloading its tokenizer.
+
 The one place S1-mini is served. S1-mini is a 0.6B text normalizer for speech-to-text output (Qwen3 fine-tune by
 Superwhisper). Projects send it a raw transcript over HTTP and get clean text back: fillers removed, self-corrections
 resolved, punctuation and capitals added, spoken numbers, times and emails written out. It is not a chat model.
@@ -10,7 +12,7 @@ S1-mini always runs through Ollama. Local URL defaults to `http://127.0.0.1:1143
 Compose defaults to `http://host.docker.internal:11434`. Explicit empty URL is an error.
 Start Ollama and prepare `s1-mini:f16` first; see [pinned setup](docs/ollama.md).
 The model-card system prompt stays unchanged, with greedy decoding and thinking off.
-The API downloads only a pinned tokenizer. Ollama owns model memory; API replicas
+Only the admin Updates Download action downloads the pinned tokenizer. Ollama owns model memory; API replicas
 keep independent queues and answer caches.
 
 ## API
@@ -52,7 +54,7 @@ does not change the key.
 
 `/admin/` (password `SERVICE_ADMIN_PASSWORD`): tokens with rate limit and expiry, usage numbers, CPU threads, the
 Settings card (update check hours, in-flight cap, answers kept, input tokens per pass), and the Updates card
-(**Check now** compares local Ollama digests; **Download new weights** runs `ollama pull`).
+(**Check now** shows the local import digest with no online version; **Download** fetches the pinned tokenizer).
 The shared data-volume marker invalidates every replica's loaded handle and answer cache.
 CPU threads are saved/displayed only; Ollama chooses its own threads.
 `/metrics` (admin password) is Prometheus text per token. `s1mini_request_seconds` is a histogram of how long each
@@ -67,7 +69,7 @@ docker compose up -d --build        # http://<host>:29280
 
 Without Docker: `run.bat` (uv, listens on `127.0.0.1:29280`). Ollama must already run.
 If Ollama is unavailable or its model is missing, health/admin still answer with readiness false;
-normalization returns 503 with a start/pull hint. The next request retries automatically.
+normalization returns 503 with a admin Updates Download hint. The next request retries automatically.
 See [deployment](deployment.md).
 
 ## Tests

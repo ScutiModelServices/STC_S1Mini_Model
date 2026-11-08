@@ -1,5 +1,7 @@
 # STC_S1Mini_Model: without Docker, on Windows
 
+First start: open `/admin/` → **Updates** → **Download**; see [the web UI guide](guide-web-ui.md#updating-the-model-files). Startup and requests load downloaded files only; an empty installation keeps health/admin available and returns 503 for inference. Import the model with [the Ollama guide](ollama.md) before downloading its tokenizer.
+
 Run the S1-mini API directly with Python and local Ollama: one process, no load balancer, listening on `127.0.0.1:29280`.
 
 ## Requirements
@@ -9,7 +11,7 @@ Run the S1-mini API directly with Python and local Ollama: one process, no load 
 
 ## Start
 Double-click `run.bat`, or run it in a terminal from `STC_S1Mini_Model\`. Choose **1 Run the service** in the menu, or run `run.bat run` to skip the menu. It runs `uv sync` to create or update `.venv`, then starts
-`python src/app.py --dotenv`. Ollama must already run; the API downloads only its tokenizer.
+`python src/app.py --dotenv`. Ollama must already run; the API loads only its downloaded tokenizer.
 
 Linux or macOS:
 ```bash

@@ -1,5 +1,7 @@
 # STC_S1Mini_Model: Docker Desktop on this PC
 
+First start: open `/admin/` → **Updates** → **Download**; see [the web UI guide](guide-web-ui.md#updating-the-model-files). Startup and requests load downloaded files only; an empty installation keeps health/admin available and returns 503 for inference. Import the model with [the Ollama guide](ollama.md) before downloading its tokenizer.
+
 Run the S1-mini API in Docker Desktop; reachable host Ollama runs the model.
 
 ## Requirements
@@ -45,7 +47,7 @@ curl http://127.0.0.1:29280/health
 ```
 
 Health/admin answer while Ollama is unavailable. Readiness becomes true after successful warm-up
-or a request; normalization returns 503 with a start/pull hint until then. Open
+or a request; normalization returns 503 with a admin Updates Download hint until then. Open
 `http://127.0.0.1:29280/admin/` and create tokens. Citadel callers use `http://stc_s1mini_model_lb:29280`.
 
 ## Updating
@@ -62,7 +64,7 @@ Docker builds and a real Ollama run have not been repeated for this migration.
 
 | Symptom | Fix |
 |---|---|
-| 503 or not ready | Start Ollama and pull/import the model; verify tokenizer download access. |
+| 503 or not ready | Start Ollama, import the model, then use Updates → Download for the tokenizer. |
 | 401 | Create a valid token and send it in `X-Internal-Token`. |
 | 422 | Unknown field or invalid styling/structure/context. |
 | 429 | Wait `Retry-After` seconds; rate or in-flight limit reached. |

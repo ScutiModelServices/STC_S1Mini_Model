@@ -108,7 +108,7 @@ class S1MiniEngine:
         except EngineError as error:
             if error.status == 503:
                 self._forget()
-                raise EngineError(f"Ollama is unavailable; start Ollama and pull {self.model}", 503) from None
+                raise EngineError("Model unavailable; start Ollama and ask an admin to press Download on the Updates card.", 503) from None
             raise
 
     def _generate_events(self, text: str, styling: str, structure: str, context: str, stop: threading.Event) -> Iterator[tuple[str, Any]]:

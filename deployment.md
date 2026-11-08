@@ -5,7 +5,7 @@ STC_S1Mini_Model is one HTTP service (port 29280) backed by a running Ollama ser
 
 ## Ways to run it
 
-Each path has its own guide. Pick one.
+Each path has its own guide. Pick one. First start needs an explicit admin Updates Download; see the web UI guide below.
 
 | Path | Guide |
 |---|---|

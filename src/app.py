@@ -93,7 +93,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
 
     updates = updates or OllamaUpdates(client.model, cached_sha=lambda: client.cached_sha(), remote_sha=lambda: client.remote_sha(),
                                  download=lambda: client.pull(), unload=lambda: client.unload(),
-                                 description="Reads the installed Ollama digest without downloading; no newer-version comparison. Download is always available and runs ollama pull.",
+                                 description="Checks the local Ollama import without downloading; no online model version to compare. Download fetches the pinned tokenizer; import model weights using the Ollama guide. Registry-backed alternatives also pull on Download.",
                                  reload_note="Weights downloaded. Every replica drops the old copy within a few seconds and loads the new weights on its next request.")
 
     async def check_forever() -> None:

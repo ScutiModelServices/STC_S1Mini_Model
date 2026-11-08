@@ -12,7 +12,7 @@ class OllamaUpdates(Updates):
         await super()._check()
         # Only the installed digest is known; this flag offers refresh, not a newer release.
         for row in self._status["weights"]:
-            row["update"] = True
+            row["update"] = row["cached"] is None
         return self.status()
 
     async def update_weights(self) -> dict[str, Any]:

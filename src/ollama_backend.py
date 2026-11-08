@@ -60,11 +60,11 @@ class S1Tokenizer:
 
 
 def load_tokenizer(source: str) -> S1Tokenizer:
-    """Download only the pinned vocabulary; never model weights."""
+    """Load only the pinned vocabulary already downloaded by an admin."""
     from huggingface_hub import hf_hub_download
     from tokenizers import Tokenizer
 
-    filename = hf_hub_download(source, "tokenizer.json", revision=TOKENIZER_REVISION, token=False)
+    filename = hf_hub_download(source, "tokenizer.json", revision=TOKENIZER_REVISION, token=False, local_files_only=True)
     return S1Tokenizer(Tokenizer.from_file(filename))
 
 
@@ -163,6 +163,12 @@ def engine_from_env(*, config: Any = None, **options: Any) -> S1MiniEngine:
         return next((row["digest"] for row in reply.get("models", []) if row["name"] == name), None)
 
     def pull(_: str) -> None:
+        from huggingface_hub import hf_hub_download
+
+        hf_hub_download(DEFAULT_MODEL, "tokenizer.json", revision=TOKENIZER_REVISION, token=False, force_download=True)
+        # Local GGUF imports have no registry counterpart; the operator imports them.
+        if model == DEFAULT_OLLAMA_MODEL:
+            return
         with _call(url, "/api/pull", {"model": model, "stream": False}, 3600) as response:
             reply = _read_json(response)
         if reply.get("status") != "success":
@@ -174,11 +180,11 @@ def engine_from_env(*, config: Any = None, **options: Any) -> S1MiniEngine:
         except EngineError as error:
             if error.status == 400:
                 raise
-            raise EngineError(f"Ollama is unavailable; start Ollama and pull {model}", 503) from None
+            raise EngineError("Model unavailable; start Ollama and ask an admin to press Download on the Updates card.", 503) from None
         except Exception:
-            raise EngineError("S1-mini tokenizer could not be loaded; retry when its download is available", 503) from None
+            raise EngineError("Tokenizer unavailable; ask an admin to press Download on the Updates card.", 503) from None
 
     parallel = _parallel()
     engine = S1MiniEngine(model, loader=loader, parallel=parallel, cached_sha=local_digest,
-                         remote_sha=lambda source: local_digest(source) or "", download=pull, **options)
+                         remote_sha=lambda source: None, download=pull, **options)
     return engine

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Breaking: startup, warm-up and requests load downloaded weights only. First run: open `/admin/` → Updates → Download; health/admin remain available and inference returns 503 until ready.
+- Download now fetches the pinned tokenizer; local `s1-mini:f16` weights remain an operator GGUF import, with no online model version to compare. Registry-backed alternate tags pull only on Download.
+
 - New `SERVICE_OLLAMA_PARALLEL` (default 2): generations one replica runs at once, like CNV_MiniCPM52B_Model. Before, each replica ran one at a time. Set it to the `OLLAMA_NUM_PARALLEL` of your Ollama; the in-flight cap defaults to 4 x this value.
 - Breaking: removed torch backend, transformers/accelerate dependencies, `model`/`dtype` settings (`SERVICE_MODEL`/`SERVICE_DTYPE`). Ollama is now the only backend; the fixed pinned tokenizer uses tokenizers without model weights. Removed settings return 422. `project` remains unsupported (422).
 - Migration: start Ollama and pull/import `SERVICE_OLLAMA_MODEL`. Local URL defaults to `http://127.0.0.1:11434`, Compose to `http://host.docker.internal:11434`; empty URL fails. Health/admin stay available during outages or missing models; normalization returns 503 with a start/pull hint and retries on the next request.

@@ -1,6 +1,8 @@
 # Host Ollama setup
 
-S1-mini by Superwhisper always runs through Ollama. The API downloads only a pinned tokenizer,
+First start: open `/admin/` → **Updates** → **Download**; see [the web UI guide](guide-web-ui.md#updating-the-model-files). Startup and requests load downloaded files only; an empty installation keeps health/admin available and returns 503 for inference. Import the model with [the Ollama guide](ollama.md) before downloading its tokenizer.
+
+S1-mini by Superwhisper always runs through Ollama. Only the admin Updates Download action downloads the pinned tokenizer,
 using `tokenizers` for exact counts and the original two-message Qwen3 non-thinking template.
 Tokenizer revision: `88f6b15896c73bbb13a3b596e0afe8ea0d5150b4` from `superwhisper/s1-mini`.
 Raw `/api/generate` preserves the model-card prompt and control line. Decoding stays greedy,
@@ -34,15 +36,13 @@ $env:SERVICE_OLLAMA_MODEL = 's1-mini:f16'
 uv run python src/app.py
 ```
 
-Health/admin start during outages; readiness stays false and calls return 503 with a start/pull hint.
+Health/admin start during outages; readiness stays false and calls return 503 with a admin Updates Download hint.
 The next request retries. CPU threads are saved/displayed only; Ollama chooses its own threads.
 API replicas have independent queues/caches and share Ollama model memory.
 
 ## Updates and verification
 
-Check now compares local digests. Download runs `ollama pull`, then invalidates every replica
-through the data-volume marker. Unpublished local F16 imports cannot be pulled from a registry;
-re-import the verified GGUF when needed. Failed pulls keep current loaded state.
+S1-mini is a local Ollama import: import its verified GGUF using [the Ollama guide](ollama.md), then use Download for the pinned tokenizer. There is no online model version to compare. Registry-backed alternate tags also pull on Download.
 The old models volume is unused; Docker tokenizer cache is under `/data/tokenizer-cache`.
 
 ```powershell

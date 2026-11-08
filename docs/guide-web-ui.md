@@ -107,10 +107,13 @@ Replicas re-read settings; restart rows apply on startup.
 
 ## Updating the model files
 
-**Check now** compares local Ollama digests. **Download new weights** runs `ollama pull`
-and invalidates replicas through the shared data-volume marker. Unpublished local tags require
-[the pinned import](ollama.md); failed pulls keep the current model. The card does not compare
-upstream releases automatically.
+The service loads only downloaded weights and tokenizer files. Startup, warm-up and requests never download. With no downloaded model, `/health` and `/admin/` answer, `ready` is false and inference returns 503 with an admin Download hint. First start: open `/admin/` → **Updates** → **Download**. S1-mini is a local Ollama import: import its verified GGUF using [the Ollama guide](ollama.md), then use Download for the pinned tokenizer. There is no online model version to compare. Registry-backed alternate tags also pull on Download.
+
+Admin curl alternative:
+
+```bash
+curl -X POST http://127.0.0.1:29280/admin/updates/weights -H "X-Internal-Token: <ADMIN_PASSWORD>"
+```
 
 ## Connect to this service
 

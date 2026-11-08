@@ -1,5 +1,7 @@
 # STC_S1Mini_Model: Docker on a deployment machine
 
+First start: open `/admin/` → **Updates** → **Download**; see [the web UI guide](guide-web-ui.md#updating-the-model-files). Startup and requests load downloaded files only; an empty installation keeps health/admin available and returns 503 for inference. Import the model with [the Ollama guide](ollama.md) before downloading its tokenizer.
+
 Run the S1-mini API with host Ollama on a separate always-on machine (default `lex@scutiserver1.local`, folder
 `/media/ZimaOS-HD/Apps/STC_S1Mini_Model`). Callers reach it over the published port.
 

@@ -192,7 +192,8 @@ def test_engine_wiring_multichunk_stream_cache_422_and_updates(server, monkeypat
     assert sum(json.loads(line)["type"] == "sentence" for line in second.text.splitlines()) >= 2
     assert app.post("/v1/normalize", json={**body, "temperature": 0}).status_code == 422
     assert asyncio.run(engine.cached_sha()) == "abc"
-    assert asyncio.run(engine.remote_sha()) == "abc"
+    assert asyncio.run(engine.remote_sha()) is None
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", lambda *args, **kwargs: "tokenizer.json")
     asyncio.run(engine.pull())
     assert seen[-1] == {"model": "m", "stream": False}
 
@@ -214,7 +215,7 @@ def test_unreachable_ollama_keeps_service_up_and_returns_503(monkeypatch, stream
         assert client.get("/admin/").status_code == 200
         reply = client.post("/v1/normalize", json={"text": "hello", "stream": stream})
         assert reply.status_code == 503
-        assert "start Ollama and pull m" in reply.json()["detail"]
+        assert "press Download on the Updates card" in reply.json()["detail"]
         assert "127.0.0.1:1" not in reply.text
 
 
@@ -262,7 +263,7 @@ def test_missing_model_returns_503_and_recovers_after_model_is_available(server,
     with TestClient(create_app(warm=True)) as client:
         reply = client.post("/v1/normalize", json={"text": "hello"})
         assert reply.status_code == 503
-        assert "start Ollama and pull m" in reply.json()["detail"]
+        assert "press Download on the Updates card" in reply.json()["detail"]
         assert client.get("/health").json()["ready"] is False
         missing[0] = False
         assert client.post("/v1/normalize", json={"text": "hello"}).status_code == 200
@@ -288,7 +289,8 @@ def test_explicit_download_pulls_even_when_local_digest_is_unchanged(server, mon
     asyncio.run(engine.warm())
     client = TestClient(create_app(engine, admin_password="admin"))
     check = client.post("/admin/updates/check", headers={"X-Internal-Token": "admin"})
-    assert check.json()["weights"][0]["update"] is True
+    assert check.json()["weights"][0]["latest"] is None
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", lambda *args, **kwargs: "tokenizer.json")
     reply = client.post("/admin/updates/weights", headers={"X-Internal-Token": "admin"})
     assert reply.status_code == 200
     assert {"model": "m", "stream": False} in server[1]
