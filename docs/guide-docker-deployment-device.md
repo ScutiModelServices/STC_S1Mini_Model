@@ -1,12 +1,12 @@
 # STC_S1Mini_Model: Docker on a deployment machine
 
-Run S1-mini on the CPU on a separate always-on machine (default `lex@scutiserver1.local`, folder
+Run the S1-mini API with host Ollama on a separate always-on machine (default `lex@scutiserver1.local`, folder
 `/media/ZimaOS-HD/Apps/STC_S1Mini_Model`). Callers reach it over the published port.
 
 ## Requirements on the machine
 
 - Docker + Compose v2, and ssh access (root over ssh is refused; use the normal user).
-- Enough RAM for the model times `SERVICE_REPLICAS`.
+- Reachable Ollama with the selected model; API replicas share model memory. See [setup](ollama.md).
 
 ## 1. Publish the code (from your PC)
 
@@ -33,7 +33,8 @@ cd /media/ZimaOS-HD/Apps/STC_S1Mini_Model
 ```
 Create `.env` (deploy option 2 copies yours, or `cp .env.example .env` and edit):
 - `SERVICE_ADMIN_PASSWORD`: a real password.
-- `SERVICE_REPLICAS=1` unless you have the memory for more.
+- `SERVICE_REPLICAS=1` initially; Ollama schedules callers.
+- `SERVICE_OLLAMA_URL` and `SERVICE_OLLAMA_MODEL`: reachable Ollama and installed model.
 - `SERVICE_PORT=29280` (published on all interfaces; firewall it if the LAN should not reach it, or bind it to
   `127.0.0.1` in the `ports:` line of `stc_s1mini_model_lb` when only callers on the machine need it).
 
@@ -44,8 +45,8 @@ docker compose up -d --build
 docker compose ps
 curl http://127.0.0.1:29280/health
 ```
-The first start downloads about 1.5 GB of weights into the `stc_s1mini_model_models` volume; `stc_s1mini_model_lb` waits for a healthy service
-(up to 300 s grace).
+The API starts independently of Ollama availability. Health reports readiness after successful warm-up.
+Tokens, settings, tokenizer cache and update markers share `stc_s1mini_model_data`; Ollama owns model files.
 
 ## 4. Connect callers
 

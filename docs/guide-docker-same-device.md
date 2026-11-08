@@ -1,82 +1,70 @@
 # STC_S1Mini_Model: Docker Desktop on this PC
 
-Run S1-mini on the CPU in Docker Desktop on the machine you work on, so other programs on it can call it.
+Run the S1-mini API in Docker Desktop; reachable host Ollama runs the model.
 
 ## Requirements
 
-- Docker Desktop with Compose v2 (Windows: WSL2 backend).
-- About 2 GB of RAM **per replica** (each replica holds the model). Keep `SERVICE_REPLICAS=1` on a PC. Docker Desktop on Windows caps its engine at about half of your RAM unless you raise it in `.wslconfig`.
-- Network access on the first start to download the weights (about 1.5 GB) from Hugging Face.
-- CPU only. The Dockerfile installs the CPU build of torch and fails the build if a CUDA or ROCm build is found.
-
-## Steps
-
-1. Configure. In `STC_S1Mini_Model/`:
-   ```bash
-   cp .env.example .env
-   ```
-   Set `SERVICE_ADMIN_PASSWORD` (empty = no auth and no admin page, fine for a local test). Leave `SERVICE_PORT=29280`. Leave `SERVICE_REPLICAS=1`.
-2. Start:
-   ```bash
-   docker compose up -d --build
-   ```
-   The first start downloads about 1.5 GB of weights into the `stc_s1mini_model_models` volume. `stc_s1mini_model_lb` starts only after the service is healthy
-   (up to 300 s grace). Watch with `docker compose ps` and `docker compose logs -f stc_s1mini_model`.
-3. Check:
-   ```bash
-   curl http://127.0.0.1:29280/health
-   ```
-   `ready` is `false` until the model has loaded, then `true`.
-4. Open the admin page: `http://127.0.0.1:29280/admin/` (see [guide-web-ui.md](guide-web-ui.md)) and make a token for each caller.
-5. Try a call:
-   ```bash
-   curl -X POST http://127.0.0.1:29280/v1/normalize -H "Content-Type: application/json" -H "X-Internal-Token: s1mini_..." -d '{"text":"so um i need to like send the report by uh friday no wait thursday"}'
-   ```
-   Expect a JSON answer.
-6. Callers connect to the published port. The caller holds the URL and token:
-   - Caller on the host: `http://127.0.0.1:29280`.
-   - Caller in another Docker stack on the same host: `http://host.docker.internal:29280`.
+- Docker Desktop with Compose v2, and external `citadel_core` network created by Citadel.
+- Running host Ollama with the selected S1-mini GGUF; [import it first](ollama.md).
+- Network for the small pinned tokenizer on first successful warm-up.
+- Ollama owns model RAM. API replica memory has not been measured for this migration.
 
 ## Settings
 
-In `.env` next to `docker-compose.yml`:
+Copy `.env.example` to `.env`. Saved admin values beat environment values.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `SERVICE_REPLICAS` | `1` | Number of `stc_s1mini_model` containers. Read by Compose. |
-| `SERVICE_MEM_LIMIT` | `0` (no cap) | RAM cap per container, for example `3g` (bfloat16 weights use about 1.4 GiB). An out-of-memory kill then stays in the container instead of starving the host. Read by Compose. |
-| `SERVICE_PORT` | `29280` | Host port `stc_s1mini_model_lb` publishes. |
-| `SERVICE_ADMIN_PASSWORD` | empty | Password for `/admin/`. When set, every call except `/health` must send a token as `X-Internal-Token`. Empty = no auth. |
-| `SERVICE_NUM_THREAD` | torch decides | Starting value for the CPU threads card; a value saved on `/admin/` wins. Use the number of physical cores (`lscpu`: cores x sockets), not logical CPUs; more threads than cores slows every call. |
+| `SERVICE_ADMIN_PASSWORD` | empty | Unlocks admin; public requests then need service tokens. Empty disables auth. |
+| `SERVICE_PORT` | `29280` | Host port published by nginx. |
+| `SERVICE_OLLAMA_URL` | `http://host.docker.internal:11434` | Required reachable Ollama address; empty fails. |
+| `SERVICE_OLLAMA_MODEL` | `s1-mini:f16` | Installed model; saved restart setting wins. |
+| `SERVICE_REPLICAS` | `1` | API replicas sharing Ollama model memory. |
+| `SERVICE_MEM_LIMIT` | `0` | Optional per-API memory cap; Ollama memory is separate. |
+| `SERVICE_NUM_THREAD` | empty | Saved/displayed only; Ollama chooses its own threads. |
 
-On the **Settings** card of `/admin/` (saved in `settings.json` beside the tokens, shared by all replicas; a saved
-value beats the environment variable named in brackets): update check hours (`SERVICE_UPDATE_CHECK_HOURS`, 6),
-in-flight cap (`SERVICE_MAX_INFLIGHT`, 0 = 4), answers kept per replica (`SERVICE_CACHE_SIZE`, 256, 0 = off), input tokens per pass (`SERVICE_CHUNK_TOKENS`, 800), base model
-(`SERVICE_MODEL`, restart), number format (`SERVICE_DTYPE`, restart: `bfloat16` or `float32`; try `float32` if answers take many seconds on a CPU without native bfloat16 maths, it needs twice the RAM) and load at start (`SERVICE_WARM`, restart). Compose does not pass these; add the variable
-under `environment:` of `stc_s1mini_model` to use one as a starting value.
+Admin settings cover update interval, in-flight cap (0 = 4), cache size (256; 0 disables),
+input tokens per pass (800), warm-up and Ollama URL/model. Tokenizer source/revision are fixed.
+See [admin settings](guide-web-ui.md#settings).
 
-## Daily use
+## Start
 
 ```bash
-docker compose ps          # state
-docker compose logs -f stc_s1mini_model
-docker compose down        # stop (the weights volume is kept)
-docker compose up -d --build && docker compose restart stc_s1mini_model_lb   # after a code change
+docker compose up -d --build
 ```
+
+Tokens, settings, tokenizer cache and update marker share `stc_s1mini_model_data`.
+Ollama owns its model files. Docker includes the Linux host-gateway mapping.
+The old models volume is unused; see [migration and rollback](../CHANGELOG.md).
+
+## Check
+
+```bash
+curl http://127.0.0.1:29280/health
+```
+
+Health/admin answer while Ollama is unavailable. Readiness becomes true after successful warm-up
+or a request; normalization returns 503 with a start/pull hint until then. Open
+`http://127.0.0.1:29280/admin/` and create tokens. Citadel callers use `http://stc_s1mini_model_lb:29280`.
+
+## Updating
+
+```bash
+docker compose up -d --build
+docker compose restart stc_s1mini_model_lb
+```
+
+Model updates use [the Updates card](guide-web-ui.md#updating-the-model-files).
+Docker builds and a real Ollama run have not been repeated for this migration.
 
 ## Problems
 
 | Symptom | Fix |
 |---|---|
-| `address already in use` on 29280 | Another copy (`run.bat`, or the same stack on another compose project) is running. Stop it or change `SERVICE_PORT`. |
-| `/health` shows `ready: false` for minutes | First start: the weights are downloading or loading. Check `docker compose logs -f stc_s1mini_model`. |
-| 401 Invalid token | The caller's token is missing or revoked; make one on `/admin/`. |
-| Container restarts in a loop | Out of RAM. Raise the Docker Desktop memory limit or lower the replica count. |
-| `stc_s1mini_model_lb` never starts | No replica is healthy yet (first download, or out of memory). `docker compose logs stc_s1mini_model`. |
-| Replicas restart in a loop | Out of RAM. Lower `SERVICE_REPLICAS`. |
-| 422 on `/v1/normalize` | A field is wrong: `styling`, `structure` and `context` accept only the listed values, and no other field is allowed. |
-| 429 | Over the token's rate limit, or too many calls waiting for the model. |
-| Slow answers | CPU speed with `transformers` is modest for any model of this size; use a 4-bit GGUF runtime if speed matters. Raise CPU threads on `/admin/`. |
-| nginx 502 after scaling | `stc_s1mini_model_lb` not restarted after the replica count changed. |
-
-The load balancer also joins external `citadel_core` as `stc_s1mini_model_lb`. Start the Citadel stack first so that network exists; tool services on it use `http://stc_s1mini_model_lb:29280`. Docker project and API image are `stc_s1mini_model` and `stc_s1mini_model:latest`; persistent volumes have explicit `stc_s1mini_model_*` names. Volume migration and rollback instructions are in [CHANGELOG.md](../CHANGELOG.md).
+| 503 or not ready | Start Ollama and pull/import the model; verify tokenizer download access. |
+| 401 | Create a valid token and send it in `X-Internal-Token`. |
+| 422 | Unknown field or invalid styling/structure/context. |
+| 429 | Wait `Retry-After` seconds; rate or in-flight limit reached. |
+| nginx 502 after scaling | Restart `stc_s1mini_model_lb`. |
+| Slow answers | Configure Ollama on its host; the API threads card has no generation effect. |
+| Port 29280 in use | Stop the other copy or change `SERVICE_PORT`. |

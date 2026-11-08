@@ -47,7 +47,6 @@ def make_engine(**options):
         return FakeLoaded(source, reply, fail, fail_after)
 
     options.setdefault("loader", loader)
-    options.setdefault("set_threads", lambda count: None)
     engine = S1MiniEngine("m", **options)
     engine.loads = loads
     return engine

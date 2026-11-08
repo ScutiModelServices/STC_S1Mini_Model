@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app import create_app
 from engine import EngineError, S1MiniEngine, messages_for
-from ollama_backend import OllamaLoaded, engine_from_env
+from ollama_backend import OllamaLoaded, S1Tokenizer, engine_from_env
 from options import SETTINGS
 from settings import Config
 
@@ -50,7 +50,9 @@ def server():
                 return
             self.send_response(200)
             self.end_headers()
-            if not prompt:
+            if self.path == "/api/pull":
+                pieces = [{"status": "success"}]
+            elif not prompt:
                 pieces = [{"done": True}]
             elif "bad-json" in prompt:
                 self.wfile.write(b"not json\n")
@@ -86,10 +88,9 @@ def loaded(url, **kwargs):
     return OllamaLoaded(url, "m", Tokenizer(), **kwargs)
 
 
-def test_exact_prompt_greedy_cpu_options_counts_and_live_threads(server):
+def test_exact_prompt_greedy_options_and_counts(server):
     url, seen = server
-    threads = [3]
-    model = loaded(url, threads=lambda: threads[0])
+    model = loaded(url)
     assert model.count("one two three") == 3
     messages = messages_for("um hello", "formal", "lists", "email")
     stop = threading.Event()
@@ -100,10 +101,8 @@ def test_exact_prompt_greedy_cpu_options_counts_and_live_threads(server):
     assert seen[-1]["prompt"] == json.dumps(messages)
     assert seen[-1]["raw"] is True
     assert seen[-1]["options"] == {"temperature": 0, "num_predict": 12, "repeat_penalty": 1.0,
-                                   "num_ctx": 4096, "num_gpu": 0, "num_thread": 3}
-    threads[0] = 2
-    list(model.stream(messages, 12, 5, stop))
-    assert seen[-1]["options"]["num_thread"] == 2
+                                   "num_ctx": 4096, "num_gpu": 0}
+    assert "num_thread" not in seen[-1]["options"]
 
 
 def test_chunk_completion_never_sets_callers_stop_and_close_stops_only_current_chunk(server):
@@ -128,8 +127,8 @@ def test_long_single_sentence_gets_context_for_both_prompt_and_output(server):
     assert body["options"]["num_ctx"] == model.count(body["prompt"]) + 6500
 
 
-@pytest.mark.parametrize("text,status", [("http-error", 400), ("stream-error", None),
-                                        ("bad-json", None), ("truncated", None), ("broken-chunk", None)])
+@pytest.mark.parametrize("text,status", [("http-error", 400), ("stream-error", 503),
+                                        ("bad-json", 503), ("truncated", 503), ("broken-chunk", 503)])
 def test_transport_failures_are_engine_errors(server, text, status):
     with pytest.raises(EngineError) as error:
         list(loaded(server[0]).stream(messages_for(text, "casual", "prose", "general"), 12, 5, threading.Event()))
@@ -153,7 +152,7 @@ def test_warmup_body_read_failure_is_engine_error(monkeypatch):
             raise TimeoutError("stalled warmup")
 
     monkeypatch.setattr("ollama_backend._call", lambda *args: Response())
-    with pytest.raises(EngineError, match="stalled warmup"):
+    with pytest.raises(EngineError, match="Ollama response failed"):
         loaded("http://unused")
 
 
@@ -167,13 +166,14 @@ def test_saved_backend_settings_win_over_environment(server, tmp_path, monkeypat
     assert engine.model == "m"
     assert asyncio.run(engine.normalize("hi", "casual", "prose", "general"))["content"] == "Hello. Bye."
     config.set({"ollama_url": ""})
-    assert engine_from_env(config=config) is None
+    with pytest.raises(ValueError, match="SERVICE_OLLAMA_URL.*required"):
+        engine_from_env(config=config)
 
 
 def test_engine_wiring_multichunk_stream_cache_422_and_updates(server, monkeypatch):
     url, seen = server
     monkeypatch.delenv("SERVICE_OLLAMA_URL", raising=False)
-    assert engine_from_env() is None
+    assert isinstance(engine_from_env(), S1MiniEngine)
     monkeypatch.setenv("SERVICE_OLLAMA_URL", url)
     monkeypatch.setenv("SERVICE_OLLAMA_MODEL", "m")
     monkeypatch.setattr("ollama_backend.load_tokenizer", lambda source: Tokenizer())
@@ -193,5 +193,103 @@ def test_engine_wiring_multichunk_stream_cache_422_and_updates(server, monkeypat
     assert app.post("/v1/normalize", json={**body, "temperature": 0}).status_code == 422
     assert asyncio.run(engine.cached_sha()) == "abc"
     assert asyncio.run(engine.remote_sha()) == "abc"
-    with pytest.raises(EngineError, match="re-import"):
-        asyncio.run(engine.pull())
+    asyncio.run(engine.pull())
+    assert seen[-1] == {"model": "m", "stream": False}
+
+def test_url_default_is_local_and_empty_is_error(monkeypatch):
+    monkeypatch.delenv("SERVICE_OLLAMA_URL", raising=False)
+    assert isinstance(engine_from_env(), S1MiniEngine)
+    monkeypatch.setenv("SERVICE_OLLAMA_URL", "  ")
+    with pytest.raises(ValueError, match="SERVICE_OLLAMA_URL.*required"):
+        engine_from_env()
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_unreachable_ollama_keeps_service_up_and_returns_503(monkeypatch, stream):
+    monkeypatch.setenv("SERVICE_OLLAMA_URL", "http://127.0.0.1:1")
+    monkeypatch.setenv("SERVICE_OLLAMA_MODEL", "m")
+    monkeypatch.setattr("ollama_backend.load_tokenizer", lambda source: Tokenizer())
+    with TestClient(create_app(warm=True)) as client:
+        assert client.get("/health").json()["ready"] is False
+        assert client.get("/admin/").status_code == 200
+        reply = client.post("/v1/normalize", json={"text": "hello", "stream": stream})
+        assert reply.status_code == 503
+        assert "start Ollama and pull m" in reply.json()["detail"]
+        assert "127.0.0.1:1" not in reply.text
+
+
+def test_removed_settings_are_unknown(tmp_path):
+    config = Config(tmp_path / "test-config.json", SETTINGS)
+    names = {row["key"] for row in config.describe()}
+    for removed in ("model", "d" + "type", "max_" + "project_" + "models", "project_" + "models_dir"):
+        assert removed not in names
+        with pytest.raises(ValueError, match="Unknown setting"):
+            config.set({removed: "old"})
+
+
+def test_pinned_tokenizer_preserves_counts_and_nonthinking_prompt():
+    from tokenizers import Tokenizer as Vocabulary
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
+
+    vocabulary = Vocabulary(WordLevel({"[UNK]": 0, "hello": 1, "world": 2}, unk_token="[UNK]"))
+    vocabulary.pre_tokenizer = Whitespace()
+    tokenizer = S1Tokenizer(vocabulary)
+    assert tokenizer("hello world")["input_ids"] == [1, 2]
+    messages = messages_for("hello world", "formal", "prose", "general")
+    assert tokenizer.apply_chat_template(messages) == (
+        f"<|im_start|>system\n{messages[0]['content']}<|im_end|>\n"
+        "<|im_start|>user\n[Styling: formal] [Structure: prose] [Context: general]\n"
+        "hello world<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    )
+
+
+def test_missing_model_returns_503_and_recovers_after_model_is_available(server, monkeypatch):
+    import ollama_backend
+
+    real_call = ollama_backend._call
+    missing = [True]
+
+    def call(url, path, body, timeout):
+        if missing[0]:
+            raise EngineError("Ollama is unavailable", 503)
+        return real_call(url, path, body, timeout)
+
+    monkeypatch.setenv("SERVICE_OLLAMA_URL", server[0])
+    monkeypatch.setenv("SERVICE_OLLAMA_MODEL", "m")
+    monkeypatch.setattr(ollama_backend, "_call", call)
+    monkeypatch.setattr(ollama_backend, "load_tokenizer", lambda source: Tokenizer())
+    with TestClient(create_app(warm=True)) as client:
+        reply = client.post("/v1/normalize", json={"text": "hello"})
+        assert reply.status_code == 503
+        assert "start Ollama and pull m" in reply.json()["detail"]
+        assert client.get("/health").json()["ready"] is False
+        missing[0] = False
+        assert client.post("/v1/normalize", json={"text": "hello"}).status_code == 200
+        assert client.get("/health").json()["ready"] is True
+
+
+def test_removed_request_field_and_settings_return_422(tmp_path):
+    from conftest import make_engine
+
+    config = Config(tmp_path / "test-config.json", SETTINGS)
+    client = TestClient(create_app(make_engine(), admin_password="admin", config=config))
+    headers = {"X-Internal-Token": "admin"}
+    assert client.put("/admin/settings", headers=headers, json={"values": {"model": "old"}}).status_code == 422
+    public = TestClient(create_app(make_engine()))
+    assert public.post("/v1/normalize", json={"text": "hello", "project": "old"}).status_code == 422
+
+
+def test_explicit_download_pulls_even_when_local_digest_is_unchanged(server, monkeypatch):
+    monkeypatch.setenv("SERVICE_OLLAMA_URL", server[0])
+    monkeypatch.setenv("SERVICE_OLLAMA_MODEL", "m")
+    monkeypatch.setattr("ollama_backend.load_tokenizer", lambda source: Tokenizer())
+    engine = engine_from_env()
+    asyncio.run(engine.warm())
+    client = TestClient(create_app(engine, admin_password="admin"))
+    check = client.post("/admin/updates/check", headers={"X-Internal-Token": "admin"})
+    assert check.json()["weights"][0]["update"] is True
+    reply = client.post("/admin/updates/weights", headers={"X-Internal-Token": "admin"})
+    assert reply.status_code == 200
+    assert {"model": "m", "stream": False} in server[1]
+    assert engine.ready is False and engine.generation == 1

@@ -1,7 +1,7 @@
 @echo off
-REM Starts the S1-mini service on port 29280 (syncs .venv with uv on each run). The first start downloads the weights (about 1.5 GB).
+REM Starts the STC_S1Mini_Model service on port 29280 (syncs .venv with uv on each run).
 REM LABEL: S1-mini Service
-REM DESCRIPTION: Shared HTTP service that runs S1-mini on the CPU for every project.
+REM DESCRIPTION: S1-mini HTTP API; running Ollama required.
 cd /d "%~dp0"
 if /i "%~1"=="run" goto run
 if /i "%~1"=="deploy" goto deploy
@@ -31,7 +31,7 @@ if errorlevel 1 (
 )
 call .venv\Scripts\activate.bat
 
-python src/app.py --dotenv
+echo Running Ollama with S1-mini is required. & python src/app.py --dotenv
 pause
 exit /b 0
 

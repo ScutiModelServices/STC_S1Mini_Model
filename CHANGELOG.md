@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Breaking: removed torch backend, transformers/accelerate dependencies, `model`/`dtype` settings (`SERVICE_MODEL`/`SERVICE_DTYPE`). Ollama is now the only backend; the fixed pinned tokenizer uses tokenizers without model weights. Removed settings return 422. `project` remains unsupported (422).
+- Migration: start Ollama and pull/import `SERVICE_OLLAMA_MODEL`. Local URL defaults to `http://127.0.0.1:11434`, Compose to `http://host.docker.internal:11434`; empty URL fails. Health/admin stay available during outages or missing models; normalization returns 503 with a start/pull hint and retries on the next request.
+- Removed unused `stc_s1mini_model_models` volume mount/declaration. Old models volume with HF weights is unused and can be deleted after migration; keep it for rollback to the previous commit. Project model folders are no longer used. Tokens, settings, tokenizer-only cache and update markers remain in `stc_s1mini_model_data`.
+- Removed unused token project restrictions: create/edit accepts only omitted/null `projects` for shared-editor compatibility; lists return 422. Inherited restrictions are ignored and hidden.
+- CPU threads are saved/displayed only; Ollama chooses its own threads. Updates retain local digest checks; Download runs ollama pull. Unpublished local F16 tags still need the documented pinned import.
+- Retired comparison reports and dual-backend benchmark. Historical Ryzen 7 7445HS/six-thread measurement: torch bf16 9.17 tok/s, Ollama F16 17.10 tok/s, identical outputs on twelve synthetic transcripts. Real Ollama execution and Docker builds were not repeated for this migration.
+
 - `SERVICE_MODELS_DIR` sets where a local (no Docker) run keeps downloaded model weights: `settings.apply_models_dir()` maps it to `HF_HOME` and `OLLAMA_MODELS` at start.
 - Docs: `docs/guide-cli.md`, a PowerShell-only way to test the service.
 

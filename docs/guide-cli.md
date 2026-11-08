@@ -31,7 +31,7 @@ Options: `styling`, `structure`, `context`, `stream`.
 | Answer | Cause |
 |---|---|
 | `401` | Wrong value: admin routes need the admin password, `/v1/*` needs a token. |
-| `403` | The token's *projects* list does not include what you asked for. |
+| `503` | Start Ollama and pull/import the configured model. |
 | `429` | Token rate used up or too many calls waiting; wait `Retry-After` seconds. |
 | `422` | A field is unknown or out of range; the answer says which. |
 | connection refused | Not running, or another port; see the run-path guides. |

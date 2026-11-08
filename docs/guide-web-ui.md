@@ -26,7 +26,7 @@ the password and any freshly created token. If browser storage is blocked, sign 
 
 The header shows the service address and a health badge with an icon and text: **Healthy**, **Starting**, or
 **Unreachable**. Health is checked without authentication every 10 seconds while signed in. **Starting** means the model
-is not loaded yet (the first start downloads it). Tiles show model readiness, replicas, parallel generations, CPU threads, and active tokens.
+has not successfully loaded through Ollama yet. Tiles show model readiness, replicas, parallel generations, CPU threads, and active tokens.
 Use **Theme** to cycle between system, light, and dark appearance; this preference is saved in the browser.
 
 ## Tokens
@@ -55,19 +55,8 @@ Tokens are enforced only while `SERVICE_ADMIN_PASSWORD` is set.
 
 ## CPU threads
 
-With host Ollama selected, this card sends `num_thread` with the next chunk; it does not
-configure the Ollama server globally. Changes propagate to other API replicas within about
-a second. Use physical cores. Torch behavior below remains the fallback.
-Use the synchronized slider or number field, then **Apply**. Both accept 1 to 256. Apply is disabled and
-shows a busy indicator during saving; a short **Saved** confirmation follows. The page states:
-“Saved to settings.json. Other replicas apply it within a few seconds.”
-- Sets `num_thread` used by torch for every generation: how many CPU threads it uses. Start near the
-  number of physical cores the host can spare.
-- Range 1 to 256. The field shows the value in use now (`num_thread` in `/health`; empty = torch decides).
-- The change applies at once to the replica that answers the click and is saved to `settings.json` next to
-  `tokens.json`. Other replicas pick it up within a few seconds; no restart is needed.
-- The saved value beats `SERVICE_NUM_THREAD` from `.env`. Remove `settings.json` from the `/data` volume to go back
-  to the `.env` value.
+This card saves/displays 1 to 256 and synchronizes replicas. It has no generation effect:
+Ollama chooses its own threads. Configure Ollama on its host. Saved value beats `SERVICE_NUM_THREAD`.
 
 ## Replicas and parallel requests (read-only)
 
@@ -88,14 +77,16 @@ docker compose restart stc_s1mini_model_lb
 | `Wrong admin password` | Password differs from `SERVICE_ADMIN_PASSWORD` in the running container. Recreate it after editing `.env`. |
 | `Admin password required (set SERVICE_ADMIN_PASSWORD)` | The password is empty. Set it and restart. |
 | Token lost | Revoke it and create a new one. |
-| `/health` shows `ready: false` | The model is still loading or downloading, or loading failed (see the container logs). |
+| `/health` shows `ready: false` | Ollama or its model is unavailable, or the tokenizer is loading (see the container logs). |
 | Never expose port 29280 to the internet | It is a LAN tool; use a firewall or VPN for remote access. |
 
 ## Limiting a token to projects
 
 Not used by this service: it has one model and no project models, so the list has no effect.
 
-When you create a token you can list the projects it may use (comma separated; empty = all). A request whose `project` is not on the list is refused with `403`. A request without `project` is always allowed. The list cannot be edited later: revoke the token and create a new one.
+The shared editor remains for compatibility; leave the projects field blank. Token create/edit accepts
+only omitted or null scopes; any list returns 422. Inherited scopes are ignored and hidden.
+The `project` request field is unsupported and returns 422.
 
 ## Rate limit, expiry, edits, usage and metrics
 
@@ -104,32 +95,22 @@ When you create a token you can list the projects it may use (comma separated; e
 - **Edit** changes the allowed projects and the rate limit without revoking the token.
 - **Usage:** each row shows errors (answers with status 500 or above) and the average time per call. The counters are written at most once a minute.
 - **Metrics:** `GET /metrics` (send the admin password in `X-Internal-Token`) returns the same numbers as Prometheus text, one series per token. It reads the shared token file, so any replica answers with the same data. `s1mini_request_seconds` is a histogram of how long each `/v1` call took on the replica that answers (to the first byte for a streamed reply); it starts from 0 when the replica restarts.
-- **Project models** card: the models loaded for a single project on the replica that answered.
+- **Project models** card: unused by this service.
 
 ## Settings
 
-**Host Ollama URL** (`SERVICE_OLLAMA_URL`) and **Ollama model** (`SERVICE_OLLAMA_MODEL`, default
-`s1-mini:f16`) apply after restart. Blank URL selects torch; saved values win over environment
-variables. **Base model** still supplies the matching HF tokenizer for exact chunk counts and
-the fixed non-thinking prompt; **Number format** affects torch only. See
-[Ollama setup](ollama.md) before selecting this backend. The Updates card compares local
-Ollama digests only; Download instructs you to re-import the pinned GGUF and restart all replicas.
-Normalize inputs, sentence streams, 422 validation and answer-cache behavior are unchanged.
-
-The **Settings** card changes options without editing `.env` or restarting: update-check interval, caches and limits, and similar. Each row shows where its value comes from (saved, environment or default). A value saved here beats the environment variable; **Reset** removes it. Every replica reads the shared settings file, so a change applies within a few seconds. Rows marked "applies after a restart" are read once at start. The admin password, ports, replica count and other Docker settings stay in `.env` or the compose file, because the service cannot change its own container.
+**Host Ollama URL** and **Ollama model** (default `s1-mini:f16`) apply after restart.
+Local URL defaults to `http://127.0.0.1:11434`; Compose supplies the host-gateway address.
+Blank URL fails startup. Tokenizer source/revision are fixed. Other settings cover update interval,
+in-flight cap, cache size, input tokens per pass and warm-up. Saved values win; Reset removes them.
+Replicas re-read settings; restart rows apply on startup.
 
 ## Updating the model files
 
-With Ollama, Check now compares local digests only. Download returns a re-import instruction:
-run `ollama create s1-mini:f16 -f Modelfile` after verifying the pinned GGUF, then restart all
-API replicas to invalidate caches. It does not pull an unverified registry model. The torch
-update behavior below is unchanged. CPU threads apply live on both backends; Ollama receives
-`num_thread` on each chunk. Use physical cores, not logical CPUs.
-
-The **Updates** card compares the downloaded revision of the Hugging Face repository with its newest one. **Download
-new weights** fetches it into the models volume; every replica drops its old copy within a few seconds and loads the
-new one on its next request (it needs RAM for both for a moment). The download is the repository's current `main`.
-Updating the service itself: `docker compose up -d --build`, then `docker compose restart stc_s1mini_model_lb`.
+**Check now** compares local Ollama digests. **Download new weights** runs `ollama pull`
+and invalidates replicas through the shared data-volume marker. Unpublished local tags require
+[the pinned import](ollama.md); failed pulls keep the current model. The card does not compare
+upstream releases automatically.
 
 ## Connect to this service
 

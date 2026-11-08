@@ -1,15 +1,15 @@
 # STC_S1Mini_Model: without Docker, on Windows
 
-Run S1-mini on the CPU directly with Python: one process, no load balancer, listening on `127.0.0.1:29280`.
+Run the S1-mini API directly with Python and local Ollama: one process, no load balancer, listening on `127.0.0.1:29280`.
 
 ## Requirements
 - Windows with Python 3.11 or newer and uv (`winget install astral-sh.uv`).
-- Internet on the first start (about 1.5 GB of weights).
-- RAM for the model (one copy).
+- Running Ollama with the selected S1-mini model; see [setup](ollama.md).
+- Network for the small pinned tokenizer at first successful warm-up.
 
 ## Start
 Double-click `run.bat`, or run it in a terminal from `STC_S1Mini_Model\`. Choose **1 Run the service** in the menu, or run `run.bat run` to skip the menu. It runs `uv sync` to create or update `.venv`, then starts
-`python src/app.py`. The first start downloads about 1.5 GB of weights.
+`python src/app.py --dotenv`. Ollama must already run; the API downloads only its tokenizer.
 
 Linux or macOS:
 ```bash
@@ -26,9 +26,11 @@ uv run python src/app.py
 | `SERVICE_HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` only if other devices must reach it. |
 | `SERVICE_PORT` | `29280` | Port. |
 | `SERVICE_ADMIN_PASSWORD` | empty | Unlocks `/admin/` and requires tokens on every call but `/health`. Empty = no auth. |
+| `SERVICE_OLLAMA_URL` | `http://127.0.0.1:11434` | Required URL; empty fails. |
+| `SERVICE_OLLAMA_MODEL` | `s1-mini:f16` | Installed model. |
 | `SERVICE_WARM` | `1` | Load the model at start; with `0` the first request pays the load time. |
-| `SERVICE_NUM_THREAD` | the library decides | CPU threads. Set it to the number of **physical** cores. |
-| `SERVICE_MODELS_DIR` | the library's default cache | Folder for downloaded model weights. Sets `HF_HOME` (and `OLLAMA_MODELS` to `<folder>\ollama`) at start; a real `HF_HOME` or `OLLAMA_MODELS` wins. Docker keeps weights in the `_models` volume and ignores it. |
+| `SERVICE_NUM_THREAD` | empty | Saved display value only; Ollama chooses its own threads. |
+| `SERVICE_MODELS_DIR` | the library's default cache | Local tokenizer cache override through `HF_HOME`; a real `HF_HOME` wins. Does not configure an already-running Ollama server cache. |
 
 PowerShell: `$env:SERVICE_ADMIN_PASSWORD = "secret"; .\run.bat`
 Bash: `SERVICE_ADMIN_PASSWORD=secret uv run python src/app.py`

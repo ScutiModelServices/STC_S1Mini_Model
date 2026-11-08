@@ -98,11 +98,11 @@ def test_updates_card_checks_and_downloads_without_replica_restart(page):
     sync_api.expect(page.locator("#update-list")).to_contain_text("m")
     page.click("#update-weights")
     sync_api.expect(page.locator("#update-note")).to_contain_text("loads the new weights on its next request.")
-    sync_api.expect(page.locator("#update-weights")).to_be_hidden()
+    sync_api.expect(page.locator("#update-weights")).to_be_visible()
     assert "Restart" not in page.locator("#update-note").inner_text()
 
 
-def test_token_can_be_limited_to_projects(page):
+def test_token_editor_creates_unrestricted_tokens(page):
     page.fill("#admin", PASSWORD)
     page.click("#signin-button")
     sync_api.expect(page.locator("#dashboard")).to_be_visible()
@@ -110,9 +110,10 @@ def test_token_can_be_limited_to_projects(page):
     page.fill("#projects", "Bad Name")
     page.click("#create-button")
     sync_api.expect(page.locator("#token-error")).to_contain_text("not valid")
-    page.fill("#projects", "app-a, app-b")
+    page.fill("#projects", "")
     page.click("#create-button")
-    sync_api.expect(page.locator("#rows tr")).to_contain_text("Only: app-a, app-b")
+    sync_api.expect(page.locator("#rows tr")).to_contain_text("Garrison")
+    sync_api.expect(page.locator("#rows tr")).not_to_contain_text("Only:")
 
 
 def test_token_can_be_edited_and_shows_rate_and_expiry(page):
@@ -128,10 +129,10 @@ def test_token_can_be_edited_and_shows_rate_and_expiry(page):
     sync_api.expect(row).to_contain_text("5/min")
     sync_api.expect(row).to_contain_text("Expires")
     row.get_by_role("button", name="Edit").click()
-    page.fill("#edit-projects", "app-a")
+    page.fill("#edit-projects", "")
     page.fill("#edit-rate", "")
     page.click("#save-edit")
-    sync_api.expect(row).to_contain_text("Only: app-a")
+    sync_api.expect(row).not_to_contain_text("Only:")
     sync_api.expect(row).not_to_contain_text("5/min")
 
 

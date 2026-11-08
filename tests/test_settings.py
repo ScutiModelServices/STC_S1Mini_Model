@@ -66,6 +66,6 @@ def test_describe_lists_source_and_limits(tmp_path, monkeypatch):
 
 def test_other_saved_keys_survive(tmp_path):
     path = tmp_path / "s.json"
-    settings.save(path, torch_threads=7)
+    settings.save(path, num_thread=7)
     Config(path, SCHEMA).set({"size": 1})
-    assert settings.load(path) == {"torch_threads": 7, "size": 1}
+    assert settings.load(path) == {"num_thread": 7, "size": 1}

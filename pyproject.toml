@@ -1,6 +1,6 @@
 [project]
 name = "stc_s1mini_model"
-description = "One HTTP service that runs the S1-mini speech-to-text normalizer on the CPU for every project"
+description = "One HTTP service that serves the S1-mini speech-to-text normalizer through Ollama"
 version = "0.1.0"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -9,10 +9,8 @@ dependencies = [
     "python-dotenv==1.2.2",
     "fastapi>=0.115",
     "uvicorn>=0.30",
-    "transformers>=4.57",
-    "accelerate",
-    # Listed so [tool.uv.sources] below can send it to the CPU-only index.
-    "torch",
+    "tokenizers>=0.22",
+    "huggingface-hub>=0.34",
 ]
 
 [dependency-groups]
@@ -20,15 +18,6 @@ dev = ["pytest>=8.0", "httpx>=0.27", "playwright>=1.40"]
 
 [tool.uv]
 package = false  # runs from src/, only the dependencies are installed
-
-# CPU-only torch, so the CUDA/Triton wheels are never pulled (macOS has no CPU-index wheels, so it uses PyPI).
-[tool.uv.sources]
-torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
 
 [build-system]
 requires = ["hatchling"]

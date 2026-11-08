@@ -1,4 +1,4 @@
-"""HTTP face of S1-mini, a speech-to-text transcript normalizer run in this process on the CPU.
+"""HTTP face of S1-mini, a speech-to-text transcript normalizer served through Ollama.
 
 POST /v1/normalize {"text", "styling", "structure", "context", "stream"} returns the cleaned text. With
 "stream": true the answer arrives as JSON lines, one per sentence. GET /health reports whether the model is loaded."""
@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 import time
 from contextlib import asynccontextmanager
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -23,8 +23,9 @@ from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
 from cache import AnswerCache
-from engine import CONTEXTS, DEFAULT_MODEL, STRUCTURES, STYLINGS, EngineError, S1MiniEngine, default_marker
+from engine import CONTEXTS, STRUCTURES, STYLINGS, EngineError, S1MiniEngine, default_marker
 from ollama_backend import engine_from_env
+from ollama_updates import OllamaUpdates
 from options import SETTINGS
 import settings
 from tokens import LatencyHistogram, TokenStore
@@ -32,9 +33,6 @@ from sentences import cut
 from updates import Updates
 
 _log = logging.getLogger(__name__)
-
-PROJECT_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,47}$"
-
 
 class NormalizeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")  # anything else is refused, not silently ignored
@@ -52,13 +50,13 @@ class SettingsUpdate(BaseModel):
 
 class NewToken(BaseModel):
     name: str = Field(min_length=1, max_length=64)
-    projects: list[Annotated[str, Field(pattern=PROJECT_PATTERN)]] | None = Field(None, max_length=32)
+    projects: None = None  # Shared editor sends null; project restrictions have no meaning here.
     rate: int | None = Field(None, ge=1, le=100_000)  # calls per minute
     expires_days: int | None = Field(None, ge=1, le=3650)
 
 
 class TokenScope(BaseModel):
-    projects: list[Annotated[str, Field(pattern=PROJECT_PATTERN)]] | None = Field(None, max_length=32)
+    projects: None = None
     rate: int | None = Field(None, ge=1, le=100_000)
 
 
@@ -78,9 +76,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
     tokens = tokens or TokenStore(os.environ.get("SERVICE_TOKENS_FILE", "tokens.json"))
     client = client or engine_from_env(
         config=config, marker=default_marker(), chunk_tokens=config.get("chunk_tokens") if config else 800
-    ) or S1MiniEngine(
-        config.get("model") if config else os.environ.get("SERVICE_MODEL", DEFAULT_MODEL),
-        dtype=config.get("dtype") if config else "bfloat16", marker=default_marker())
+    )
     inflight = 0
     cache = AnswerCache()
 
@@ -95,11 +91,9 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
             max_inflight if max_inflight is not None else int(os.environ.get("SERVICE_MAX_INFLIGHT") or 0))
         return value or 4
 
-    updates = updates or Updates(client.model, cached_sha=lambda: client.cached_sha(), remote_sha=lambda: client.remote_sha(),
+    updates = updates or OllamaUpdates(client.model, cached_sha=lambda: client.cached_sha(), remote_sha=lambda: client.remote_sha(),
                                  download=lambda: client.pull(), unload=lambda: client.unload(),
-                                 description=("Compares local Ollama digests only; re-import the pinned GGUF with ollama create and restart to update."
-                                              if getattr(client, "backend", "torch") == "ollama" else
-                                              "Looks for newer model weights on the Hugging Face Hub without downloading."),
+                                 description="Reads the installed Ollama digest without downloading; no newer-version comparison. Download is always available and runs ollama pull.",
                                  reload_note="Weights downloaded. Every replica drops the old copy within a few seconds and loads the new weights on its next request.")
 
     async def check_forever() -> None:
@@ -125,7 +119,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
             if saved.get("num_thread") and saved["num_thread"] != client.num_thread:
                 client.num_thread = int(saved["num_thread"])
             client.chunk_tokens = config.get("chunk_tokens")
-            client.sync()
+            await asyncio.to_thread(client.sync)
             await asyncio.sleep(1)
 
     async def warm_up() -> None:
@@ -139,7 +133,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
         background: list[asyncio.Task] = []
         try:
             if config.get("warm") if config else warm:
-                # In the background: the first start downloads the weights, and /health must answer meanwhile.
+                # In the background: Ollama loads the model, and /health must answer meanwhile.
                 background.append(asyncio.create_task(warm_up()))
             if config or check_hours > 0:
                 background.append(asyncio.create_task(check_forever()))
@@ -231,7 +225,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
                 else:
                     stats = value
         except EngineError as error:
-            yield line({"type": "error", "status": 422 if error.status == 400 else 500, "message": str(error)})
+            yield line({"type": "error", "status": 422 if error.status == 400 else (error.status or 500), "message": str(error)})
             return
         except Exception:
             _log.exception("S1-mini normalize failed")
@@ -269,7 +263,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
                 return ndjson(live_lines(events, first, started, key, size), "miss")
             reply = await client.normalize(*args)
         except EngineError as error:
-            raise HTTPException(422 if error.status == 400 else 500, str(error)) from None
+            raise HTTPException(422 if error.status == 400 else (error.status or 500), str(error)) from None
         except Exception:
             _log.exception("S1-mini normalize failed")
             raise HTTPException(500, "S1-mini could not answer") from None
@@ -314,11 +308,11 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
 
     @app.get("/admin/tokens", dependencies=[Depends(admin)])
     def list_tokens() -> dict[str, Any]:
-        return {"tokens": tokens.list()}
+        return {"tokens": [{**row, "projects": None} for row in tokens.list()]}
 
     @app.post("/admin/tokens", dependencies=[Depends(admin)])
     def create_token(body: NewToken) -> dict[str, Any]:
-        return tokens.create(body.name.strip(), body.projects, body.rate, body.expires_days)
+        return tokens.create(body.name.strip(), None, body.rate, body.expires_days)
 
     @app.get("/admin/settings", dependencies=[Depends(admin)])
     def get_settings() -> dict[str, Any]:
@@ -338,7 +332,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
 
     @app.put("/admin/tokens/{token_id}", dependencies=[Depends(admin)])
     def update_token(token_id: str, body: TokenScope) -> dict[str, bool]:
-        if not tokens.update(token_id, body.projects, body.rate):
+        if not tokens.update(token_id, None, body.rate):
             raise HTTPException(404, "No such token")
         return {"ok": True}
 
@@ -391,8 +385,7 @@ def main() -> None:
     config = settings.Config(store.settings_path, SETTINGS)
     client = engine_from_env(
         config=config, chunk_tokens=config.get("chunk_tokens"), marker=default_marker()
-    ) or S1MiniEngine(config.get("model"), chunk_tokens=config.get("chunk_tokens"),
-                     dtype=config.get("dtype"), marker=default_marker())
+    )
     saved = settings.load(store.settings_path)
     threads = saved.get("num_thread") or os.environ.get("SERVICE_NUM_THREAD", "").strip()
     if threads:

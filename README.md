@@ -6,14 +6,12 @@ resolved, punctuation and capitals added, spoken numbers, times and emails writt
 English only. It has the same admin page, tokens, rate limits, metrics, settings and update checks as the other
 model services.
 
-By default the model runs in this process on the CPU with `transformers` (about 1.5 GB of weights, bfloat16). Set
-`SERVICE_OLLAMA_URL` to use host Ollama with the official GGUF instead; blank keeps torch. See
-[exact pinned import commands and comparison procedure](docs/ollama.md). The service
-always sends the system prompt the model card requires, word for word, and decodes greedily with thinking off.
-
-Measured on Ryzen 7 7445HS with 6 CPU threads: torch bf16 **9.17 tok/s**, host Ollama F16
-**17.10 tok/s** (1.86×), with identical output on 12 synthetic transcripts. Ollama reports about
-2.0 GB at 4096 context. See [full comparison and limitations](docs/backend-comparison.md).
+S1-mini always runs through Ollama. Local URL defaults to `http://127.0.0.1:11434`;
+Compose defaults to `http://host.docker.internal:11434`. Explicit empty URL is an error.
+Start Ollama and prepare `s1-mini:f16` first; see [pinned setup](docs/ollama.md).
+The model-card system prompt stays unchanged, with greedy decoding and thinking off.
+The API downloads only a pinned tokenizer. Ollama owns model memory; API replicas
+keep independent queues and answer caches.
 
 ## API
 
@@ -47,14 +45,16 @@ requests and sends them again without generating (`X-Cache: hit`). Decoding is a
 kept. New weights empty the cache. The cache is per replica, so with N replicas the hit rate is about 1/N. `stream`
 does not change the key.
 
-**Tokens.** A token's "allowed projects" list has no effect here: there is one model and no project models.
+**Tokens.** Project scopes are removed: token create/edit accepts only omitted or null `projects`
+(for shared-editor compatibility); any list returns 422. Inherited scopes are ignored and hidden.
 
 ## Admin page
 
 `/admin/` (password `SERVICE_ADMIN_PASSWORD`): tokens with rate limit and expiry, usage numbers, CPU threads, the
 Settings card (update check hours, in-flight cap, answers kept, input tokens per pass), and the Updates card
-(**Check now** and **Download new weights** for the Hugging Face repository). New weights are downloaded once into
-the shared models volume; the other replicas notice within a few seconds and load them on their next request.
+(**Check now** compares local Ollama digests; **Download new weights** runs `ollama pull`).
+The shared data-volume marker invalidates every replica's loaded handle and answer cache.
+CPU threads are saved/displayed only; Ollama chooses its own threads.
 `/metrics` (admin password) is Prometheus text per token. `s1mini_request_seconds` is a histogram of how long each
 `/v1` call took on the replica that answers (to the first byte for a streamed reply); it starts from 0 when the
 replica restarts.
@@ -65,8 +65,10 @@ replica restarts.
 docker compose up -d --build        # http://<host>:29280
 ```
 
-Without Docker: `run.bat` (uv, listens on `127.0.0.1:29280`). The first start downloads about 1.5 GB. Each replica
-holds the model in RAM (about 2 GB), so `SERVICE_REPLICAS` multiplies memory use. See `deployment.md`.
+Without Docker: `run.bat` (uv, listens on `127.0.0.1:29280`). Ollama must already run.
+If Ollama is unavailable or its model is missing, health/admin still answer with readiness false;
+normalization returns 503 with a start/pull hint. The next request retries automatically.
+See [deployment](deployment.md).
 
 ## Tests
 
@@ -79,7 +81,7 @@ uv run pytest
 
 - One generation at a time per replica; extra calls wait, and more than the in-flight cap get 429.
 - The rate limit is per replica.
-- A pass stops after 120 s and returns what it has with `finish_reason: "length"`.
+- A pass has a 120 s timeout. Backend failures return 503 before streaming or an error event after streaming starts.
 - A style that drops end punctuation (`casual`) can leave no full stop between two passes of a long text.
 - Licence: Apache 2.0 plus a naming clause. Wherever the model is named it must be "S1-mini" by "Superwhisper". Read
   the `LICENSE` on the Hub before redistributing.
@@ -93,6 +95,8 @@ Normalize sends transcript text plus styling, structure and context to `POST /v1
 ## Documentation
 
 - [Purpose: input, output and what it is for](docs/purpose.md)
+- [Ollama setup](docs/ollama.md)
+- [Web UI](docs/guide-web-ui.md)
 - [Deployment](deployment.md)
 - [Changelog](CHANGELOG.md)
 - [Docker on another machine](docs/guide-docker-deployment-device.md)

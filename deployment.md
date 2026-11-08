@@ -1,6 +1,6 @@
 # Deploying STC_S1Mini_Model
 
-STC_S1Mini_Model is one HTTP service (port 29280). It runs as `stc_s1mini_model` replicas behind an nginx load balancer,
+STC_S1Mini_Model is one HTTP service (port 29280) backed by a running Ollama server. It runs as `stc_s1mini_model` replicas behind an nginx load balancer,
 `stc_s1mini_model_lb`. Callers use `http://<host>:29280`; they never reach a replica directly.
 
 ## Ways to run it

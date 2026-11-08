@@ -1,8 +1,4 @@
-# S1-mini service: N API replicas behind one nginx address. Each replica runs the model in its own process,
-# so RAM use is per replica; the downloaded weights are shared through the models volume.
-# Start:  docker compose up -d --build          (callers use http://<host>:29280)
-# Scale:  SERVICE_REPLICAS=3 docker compose up -d --build, then: docker compose restart stc_s1mini_model_lb
-
+# S1-mini API replicas share host Ollama; each keeps its own queue and answer cache.
 name: stc_s1mini_model
 
 services:
@@ -15,11 +11,10 @@ services:
       SERVICE_ADMIN_PASSWORD: ${SERVICE_ADMIN_PASSWORD:-}
       SERVICE_NUM_THREAD: ${SERVICE_NUM_THREAD:-}
       SERVICE_REPLICAS: ${SERVICE_REPLICAS:-1}  # shown read-only on /admin/
-      SERVICE_OLLAMA_URL: ${SERVICE_OLLAMA_URL:-}
+      SERVICE_OLLAMA_URL: ${SERVICE_OLLAMA_URL-http://host.docker.internal:11434}
       SERVICE_OLLAMA_MODEL: ${SERVICE_OLLAMA_MODEL:-s1-mini:f16}
     extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
-      - stc_s1mini_model_models:/models
       - stc_s1mini_model_data:/data
     deploy:
       replicas: ${SERVICE_REPLICAS:-1}
@@ -47,8 +42,6 @@ services:
         aliases: [stc_s1mini_model_lb]
 
 volumes:
-  stc_s1mini_model_models:
-    name: stc_s1mini_model_models
   stc_s1mini_model_data:
     name: stc_s1mini_model_data
 networks:

@@ -20,6 +20,18 @@ def client(engine=None, admin_password=None, **options):
     return TestClient(create_app(engine or make_engine(), admin_password, **options))
 
 
+def test_token_project_scopes_are_rejected_and_inherited_scopes_are_masked(tmp_path):
+    store = TokenStore(tmp_path / "t.json")
+    inherited = store.create("legacy", ["old"], None, None)
+    c = client(admin_password="admin", tokens=store)
+    admin = {"X-Internal-Token": "admin"}
+    for scope in ([], ["old"]):
+        assert c.post("/admin/tokens", headers=admin, json={"name": "n", "projects": scope}).status_code == 422
+        assert c.put(f"/admin/tokens/{inherited['id']}", headers=admin, json={"projects": scope}).status_code == 422
+    assert c.get("/admin/tokens", headers=admin).json()["tokens"][0]["projects"] is None
+    assert c.post("/admin/tokens", headers=admin, json={"name": "n", "projects": None}).status_code == 200
+
+
 def test_each_project_gets_its_own_revocable_token(tmp_path):
     c = client(admin_password="admin", tokens=TokenStore(tmp_path / "t.json"))
     admin = {"X-Internal-Token": "admin"}
@@ -84,12 +96,12 @@ def test_workers_are_read_only_and_admin_only(monkeypatch):
 
 def test_num_thread_is_reported_and_set_by_the_admin(tmp_path):
     seen = []
-    engine = make_engine(set_threads=seen.append)
+    engine = make_engine()
     c = client(engine, "admin", tokens=TokenStore(tmp_path / "t.json"))
     admin = {"X-Internal-Token": "admin"}
     assert c.put("/admin/threads", json={"num_thread": 0}, headers=admin).status_code == 422
     assert c.put("/admin/threads", json={"num_thread": 3}, headers=admin).json() == {"num_thread": 3}
-    assert seen == [3] and c.get("/health").json()["num_thread"] == 3
+    assert seen == [] and c.get("/health").json()["num_thread"] == 3
     assert settings.load(tmp_path / "settings.json")["num_thread"] == 3
 
 
@@ -112,14 +124,14 @@ def test_what_another_replica_saved_reaches_this_one(tmp_path):
     config = settings.Config(store.settings_path, SETTINGS)
     config.set({"update_check_hours": 0, "warm": False})
     seen = []
-    engine = make_engine(set_threads=seen.append)
+    engine = make_engine()
     with TestClient(create_app(engine, "admin", tokens=store, config=config)):
         settings.save(store.settings_path, num_thread=5, chunk_tokens=300)
         for _ in range(300):  # the loop looks every second
             if engine.chunk_tokens == 300:
                 break
             time.sleep(0.02)
-    assert seen == [5] and engine.chunk_tokens == 300
+    assert seen == [] and engine.chunk_tokens == 300
 
 
 def test_startup_warms_the_model():
