@@ -12,8 +12,9 @@ If `SERVICE_PORT` is changed, use that port.
 ## Before you open it
 
 The page needs the admin password: the value of `SERVICE_ADMIN_PASSWORD`.
-- Docker: set it in `.env` next to `docker-compose.yml`, then `docker compose up -d`.
-- No Docker: set it in `.env` in this folder and start with `run.bat` (it passes `--dotenv`), or set it in the environment first; a real environment variable wins over `.env`. A plain `python src/app.py` does not read `.env`.
+- Docker Desktop on this device: set it in `.env.compose` next to `docker-compose.yml`, then `docker compose --env-file .env.compose up -d`.
+- Deployment device: set it in `.env` next to `docker-compose.yml` (Deploy option 2 copies it), then `docker compose up -d`.
+- No Docker: set it in `.env.local` (or `.env`) in this folder and start with `run.bat` (it passes `--dotenv`), or set it in the environment first; a real environment variable wins over both files and `.env.local` wins over `.env`. A plain `python src/app.py` reads neither.
 - Empty password = no auth at all and the page answers `Admin password required (set SERVICE_ADMIN_PASSWORD)`. Set
   one to use the page.
 
@@ -60,10 +61,10 @@ Ollama chooses its own threads. Configure Ollama on its host. Saved value beats 
 ## Replicas and parallel requests (read-only)
 
 The tiles show replicas and parallel generations from `SERVICE_REPLICAS` and `SERVICE_OLLAMA_PARALLEL`: each replica runs that many generations at once (default 2; set it to the `OLLAMA_NUM_PARALLEL` of your Ollama).
-The muted line says **Replicas: N. Change SERVICE_REPLICAS in .env, then rebuild.** The
-page cannot change them. To change, set them in `.env`, then:
+The muted line says **Replicas: N. Change SERVICE_REPLICAS in .env.compose (or .env on the deployment device), then rebuild.** The
+page cannot change them. To change, set them in `.env.compose` (or `.env` on the deployment device), then:
 ```bash
-docker compose up -d --build
+docker compose --env-file .env.compose up -d --build
 docker compose restart stc_s1mini_model_lb
 ```
 `unknown` means the variable is not set, which is normal without Docker. Without Docker there is one process.
@@ -73,7 +74,7 @@ docker compose restart stc_s1mini_model_lb
 | Symptom | Fix |
 |---|---|
 | Page does not load | Service not running, wrong port, or blocked by a firewall. Test `/health`. |
-| `Wrong admin password` | Password differs from `SERVICE_ADMIN_PASSWORD` in the running container. Recreate it after editing `.env`. |
+| `Wrong admin password` | Password differs from `SERVICE_ADMIN_PASSWORD` in the running container. Recreate it after editing `.env.compose` or `.env`. |
 | `Admin password required (set SERVICE_ADMIN_PASSWORD)` | The password is empty. Set it and restart. |
 | Token lost | Revoke it and create a new one. |
 | `/health` shows `ready: false` | Ollama or its model is unavailable, or the tokenizer is loading (see the container logs). |

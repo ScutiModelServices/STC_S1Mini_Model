@@ -64,7 +64,7 @@ replica restarts.
 ## Run
 
 ```bash
-docker compose up -d --build        # http://<host>:29280
+docker compose --env-file .env.compose up -d --build        # http://<host>:29280
 ```
 
 Without Docker: `run.bat` (uv, listens on `127.0.0.1:29280`). Ollama must already run.

@@ -33,7 +33,7 @@ See [admin settings](guide-web-ui.md#settings).
 ## Start
 
 ```bash
-docker compose up -d --build
+docker compose --env-file .env.compose up -d --build
 ```
 
 Tokens, settings, tokenizer cache and update marker share `stc_s1mini_model_data`.
@@ -53,7 +53,7 @@ or a request; normalization returns 503 with a admin Updates Download hint until
 ## Updating
 
 ```bash
-docker compose up -d --build
+docker compose --env-file .env.compose up -d --build
 docker compose restart stc_s1mini_model_lb
 ```
 
