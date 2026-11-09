@@ -169,9 +169,11 @@ def engine_from_env(*, config: Any = None, **options: Any) -> S1MiniEngine:
         # Local GGUF imports have no registry counterpart; the operator imports them.
         if model == DEFAULT_OLLAMA_MODEL:
             return
-        with _call(url, "/api/pull", {"model": model, "stream": False}, 3600) as response:
-            reply = _read_json(response)
-        if reply.get("status") != "success":
+        from progress import ollama_pull_progress
+
+        with _call(url, "/api/pull", {"model": model, "stream": True}, 3600) as response:
+            status = ollama_pull_progress(response, model)
+        if status != "success":
             raise EngineError("Ollama did not finish pulling the model", 503)
 
     def loader(source: str) -> OllamaLoaded:
