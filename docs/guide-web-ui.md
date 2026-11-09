@@ -1,7 +1,6 @@
 # STC_S1Mini_Model: the admin web UI
 
-One page, `/admin/`, for tokens and CPU threads. It is the same for every way of running the service (Docker
-on the same device, Docker on a deployment device, no Docker). Only the address differs:
+The admin UI at `/admin/` has separate sidebar pages for health, access and model configuration. It works with every deployment mode. Only the address differs:
 
 | Run | Address |
 |---|---|
@@ -134,3 +133,17 @@ The browser caps uploads at **10 MiB**, displayed text at **256 KiB**, and binar
 ### This service's request
 
 Normalize sends transcript text plus styling, structure and context to `POST /v1/normalize`. Streaming appends sentence events as they arrive. This cleans text with S1-mini by Superwhisper; it does not transcribe uploaded audio or act as a general chat model.
+
+## Admin pages and navigation
+
+Open `/admin/` and sign in. Overview opens first; each sidebar destination has its own URL fragment and supports browser Back/Forward and direct links:
+
+- `#overview`: health, model readiness, replicas, active tokens and request counts.
+- `#playground`: service-specific request forms and streamed or media responses.
+- `#tokens`: create, edit, expire and revoke scoped access tokens.
+- `#runtime`: CPU threads where supported, replica information and live/restart settings.
+- `#updates`: check versions and explicitly download weights.
+- `#connections`: caller addresses and public endpoints.
+- `#models` and `#voices`: project models and cloned voices, shown only when supported.
+
+Collapse/Expand switches between labeled sidebar and icon rail on desktop and mobile. The non-secret sidebar preference is saved per service in this browser. Navigation preserves form drafts and active Playground requests; sign-out still clears credentials and cancels work. Page names appear once in the main header. No preview data or cross-service selector ships in the real admin UI. Existing authentication, quotas, settings precedence and explicit-download policy remain in effect.
