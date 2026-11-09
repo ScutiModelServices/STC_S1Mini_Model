@@ -195,7 +195,7 @@ def test_engine_wiring_multichunk_stream_cache_422_and_updates(server, monkeypat
     assert asyncio.run(engine.remote_sha()) is None
     monkeypatch.setattr("huggingface_hub.hf_hub_download", lambda *args, **kwargs: "tokenizer.json")
     asyncio.run(engine.pull())
-    assert seen[-1] == {"model": "m", "stream": False}
+    assert seen[-1] == {"model": "m", "stream": True}
 
 def test_url_default_is_local_and_empty_is_error(monkeypatch):
     monkeypatch.delenv("SERVICE_OLLAMA_URL", raising=False)
@@ -293,7 +293,7 @@ def test_explicit_download_pulls_even_when_local_digest_is_unchanged(server, mon
     monkeypatch.setattr("huggingface_hub.hf_hub_download", lambda *args, **kwargs: "tokenizer.json")
     reply = client.post("/admin/updates/weights", headers={"X-Internal-Token": "admin"})
     assert reply.status_code == 200
-    assert {"model": "m", "stream": False} in server[1]
+    assert {"model": "m", "stream": True} in server[1]
     assert engine.ready is False and engine.generation == 1
 
 
