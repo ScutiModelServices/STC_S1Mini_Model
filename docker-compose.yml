@@ -1,50 +1,54 @@
-# S1-mini service: N API replicas behind one nginx address. Each replica runs the model in its own process,
-# so RAM use is per replica; the downloaded weights are shared through the models volume.
-# Start:  docker compose up -d --build          (callers use http://<host>:9220)
-# Scale:  S1MINI_REPLICAS=3 docker compose up -d --build, then: docker compose restart s1mini_lb
-
-name: s1mini
+# S1-mini API replicas share host Ollama; each keeps its own queue and answer cache.
+name: stc_s1mini_model
 
 services:
-  s1mini:
+  stc_s1mini_model:
     build: .
+    image: stc_s1mini_model:latest
     restart: unless-stopped
-    mem_limit: ${S1MINI_MEM_LIMIT:-0}  # 0 = no cap; a cap makes an out-of-memory kill stay inside this container
+    mem_limit: ${SERVICE_MEM_LIMIT:-0}  # 0 = no cap; a cap makes an out-of-memory kill stay inside this container
     environment:
-      S1MINI_ADMIN_PASSWORD: ${S1MINI_ADMIN_PASSWORD:-}
-      S1MINI_NUM_THREAD: ${S1MINI_NUM_THREAD:-}
-      S1MINI_REPLICAS: ${S1MINI_REPLICAS:-1}  # shown read-only on /admin/
-      S1MINI_OLLAMA_URL: ${S1MINI_OLLAMA_URL:-}
-      S1MINI_OLLAMA_MODEL: ${S1MINI_OLLAMA_MODEL:-s1-mini:f16}
+      SERVICE_ADMIN_PASSWORD: ${SERVICE_ADMIN_PASSWORD:-}
+      SERVICE_NUM_THREAD: ${SERVICE_NUM_THREAD:-}
+      SERVICE_OLLAMA_PARALLEL: ${SERVICE_OLLAMA_PARALLEL:-2}  # same value as OLLAMA_NUM_PARALLEL on your Ollama
+      SERVICE_REPLICAS: ${SERVICE_REPLICAS:-1}  # shown read-only on /admin/
+      SERVICE_OLLAMA_URL: ${SERVICE_OLLAMA_URL-http://host.docker.internal:11434}
+      SERVICE_OLLAMA_MODEL: ${SERVICE_OLLAMA_MODEL:-s1-mini:f16}
     extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
-      - models:/models
-      - tokens:/data
+      - stc_s1mini_model_data:/data
     deploy:
-      replicas: ${S1MINI_REPLICAS:-1}
+      replicas: ${SERVICE_REPLICAS:-1}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9220/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:29280/health')"]
       interval: 15s
       timeout: 5s
       start_period: 300s
-    networks: [s1mini]
+    networks: [stc_s1mini_model]
 
-  s1mini_lb:
+  stc_s1mini_model_lb:
+    container_name: stc_s1mini_model_lb
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      - "${S1MINI_PORT:-9220}:9220"
+      - "${SERVICE_PORT:-29280}:29280"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      s1mini:
+      stc_s1mini_model:
         condition: service_healthy
-    networks: [s1mini]
+    networks:
+      stc_s1mini_model:
+      citadel:
+        aliases: [stc_s1mini_model_lb]
 
 volumes:
-  models:
-  tokens:
-
+  stc_s1mini_model_data:
+    name: stc_s1mini_model_data
 networks:
-  # Other stacks reach http://s1mini_lb:9220 by joining this network.
-  s1mini:
+  # Other stacks reach http://stc_s1mini_model_lb:29280 by joining this network.
+  stc_s1mini_model:
+    name: stc_s1mini_model
+  citadel:
+    name: citadel_core
+    external: true

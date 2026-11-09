@@ -1,4 +1,4 @@
-"""The answer cache shared by LayaModel, MiniCPM52BModel and BitNet2BModel (the same file in all three)."""
+"""The answer cache shared by DSC_Laya_Model, CNV_MiniCPM52B_Model and CNV_BitNet2B_Model (the same file in all three)."""
 
 from __future__ import annotations
 

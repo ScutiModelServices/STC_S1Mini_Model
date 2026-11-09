@@ -1,11 +1,11 @@
-"""S1-mini (a 0.6B Qwen3 text normalizer for speech-to-text output) run in this process on the CPU with `transformers`.
+"""S1-mini (a 0.6B Qwen3 text normalizer for speech-to-text output) served through Ollama.
 
 The model is not a chat model: every call sends the fixed system prompt and one control line, then the transcript,
 and decodes greedily with thinking switched off in the chat template (without that the model emits an empty
 <think> block and stops). Long transcripts are cut at sentence ends into chunks of at most `chunk_tokens` tokens,
 each normalized on its own. Output is handed out sentence by sentence, not token by token.
 
-One generation runs at a time per replica (torch already uses every core); scale with replicas.
+One generation runs at a time per replica; Ollama owns model memory and CPU scheduling.
 
 shortcut: a single sentence longer than `chunk_tokens` is sent whole; an empty result (filler-only input) is valid."""
 
@@ -46,129 +46,34 @@ def messages_for(text: str, styling: str, structure: str, context: str) -> list[
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"{control}\n{text}"}]
 
 
-class Loaded:
-    """A tokenizer and model that normalize one chunk of text."""
-
-    def __init__(self, tokenizer: Any, model: Any) -> None:
-        self.tokenizer, self.model = tokenizer, model
-
-    def count(self, text: str) -> int:
-        return len(self.tokenizer(text, add_special_tokens=False)["input_ids"])
-
-    def stream(self, messages: list[dict[str, str]], max_new_tokens: int, max_time: float,
-               stop: threading.Event) -> Iterator[tuple[str, Any]]:
-        """("content", text) pieces as the model makes them, then ("done", stats). Setting `stop` ends the generation
-        after the token being made."""
-        import torch
-        from transformers import StoppingCriteria, StoppingCriteriaList, TextIteratorStreamer
-
-        ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt",
-                                                 return_dict=True, enable_thinking=False)
-        prompt = ids["input_ids"].shape[1]
-        streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
-        result: dict[str, Any] = {}
-        halt = threading.Event()  # ours: ends this chunk only; `stop` is the caller's and spans all chunks
-
-        class Stopped(StoppingCriteria):
-            def __call__(self, input_ids, scores, **kwargs):
-                return torch.full((input_ids.shape[0],), stop.is_set() or halt.is_set(), dtype=torch.bool, device=input_ids.device)
-
-        def run() -> None:
-            try:
-                with torch.inference_mode():
-                    result["out"] = self.model.generate(**ids, max_new_tokens=max_new_tokens, max_time=max_time, do_sample=False,
-                                                        streamer=streamer, stopping_criteria=StoppingCriteriaList([Stopped()]))
-            except BaseException as error:  # the streamer would wait for the end of a generation that crashed
-                result["error"] = error
-                streamer.on_finalized_text("", stream_end=True)
-
-        worker = threading.Thread(target=run, daemon=True)
-        worker.start()
-        try:
-            for text in streamer:
-                if text:  # the streamer also hands out empty pieces (skipped special tokens)
-                    yield "content", text
-            worker.join()
-            if "error" in result:
-                raise result["error"]
-            new = result["out"][0][prompt:]
-            yield "done", {"prompt_tokens": prompt, "completion_tokens": len(new),
-                           "finish": "length" if len(new) >= max_new_tokens else "stop"}
-        finally:
-            halt.set()
-            worker.join()
-
-
-DTYPES = ("bfloat16", "float32")
-
-
-def load(source: str, dtype: str = "bfloat16") -> Loaded:
-    """`source`: a Hub repository or a checkpoint folder. `float32` is faster on CPUs without native bfloat16 maths
-    and needs twice the memory."""
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
-    model = AutoModelForCausalLM.from_pretrained(source, dtype=getattr(torch, dtype))
-    model.eval()
-    return Loaded(AutoTokenizer.from_pretrained(source), model)
-
-
-def _set_threads(count: int) -> None:
-    import torch
-
-    torch.set_num_threads(count)
-
-
-def _remote_sha(repo: str) -> str:
-    from huggingface_hub import HfApi
-
-    return HfApi().model_info(repo, token=False).sha
-
-
-def _cached_sha(repo: str) -> str | None:
-    from huggingface_hub import snapshot_download
-
-    try:
-        return Path(snapshot_download(repo_id=repo, local_files_only=True, token=False)).name  # the folder is named by commit
-    except OSError:
-        return None
-
-
-def _download(repo: str) -> None:
-    from huggingface_hub import snapshot_download
-
-    snapshot_download(repo_id=repo, token=False)
-
-
 def default_marker() -> Path:
-    """File in the shared models volume whose content changes when one replica downloads new weights."""
-    configured = os.environ.get("S1MINI_WEIGHTS_MARKER")
-    return Path(configured) if configured else Path(os.environ.get("HF_HOME") or "~/.cache/huggingface").expanduser() / ".s1mini-weights-version"
+    """File in the shared data volume whose content changes when one replica downloads new weights."""
+    configured = os.environ.get("SERVICE_WEIGHTS_MARKER")
+    return Path(configured) if configured else Path(os.environ.get("SERVICE_TOKENS_FILE", "tokens.json")).resolve().parent / ".s1mini-weights-version"
 
 
 class S1MiniEngine:
-    """The `loader`, `set_threads`, `remote_sha`, `cached_sha` and `download` callables are injectable for tests."""
+    """Ollama loader and digest/download callables are injectable for tests."""
 
-    def __init__(self, model: str = DEFAULT_MODEL, *, chunk_tokens: int = 800, timeout: float = 120.0,
-                 marker: Path | None = None, loader: Callable[[str], Loaded] | None = None, dtype: str = "bfloat16",
-                 set_threads: Callable[[int], None] = _set_threads,
-                 remote_sha: Callable[[str], str] = _remote_sha, cached_sha: Callable[[str], str | None] = _cached_sha,
-                 download: Callable[[str], None] = _download) -> None:
+    def __init__(self, model: str = DEFAULT_MODEL, *, chunk_tokens: int = 800, timeout: float = 120.0, parallel: int = 1,
+                 marker: Path | None = None, loader: Callable[[str], Any] | None = None,
+                 cached_sha: Callable[[str], str | None] | None = None,
+                 remote_sha: Callable[[str], str] | None = None,
+                 download: Callable[[str], None] | None = None) -> None:
         self.model = model
         self.chunk_tokens = chunk_tokens
         self._threads: int | None = None
         self._timeout = timeout
         self._marker = marker
         self._seen = self._read_marker()
-        if dtype not in DTYPES:
-            raise ValueError(f"dtype must be one of {', '.join(DTYPES)}, not {dtype!r}")
-        self.dtype = dtype
-        self._loader = loader or (lambda source: load(source, self.dtype))
-        self._set_threads = set_threads
+        if loader is None:
+            raise ValueError("An Ollama loader is required; use engine_from_env()")
+        self._loader = loader
         self._remote_sha_of, self._cached_sha_of, self._download_of = remote_sha, cached_sha, download
-        self._base: Loaded | None = None
+        self._base: Any | None = None
         self._load_lock = threading.Lock()
-        self._gate = asyncio.Semaphore(1)
+        self.parallel = max(1, int(parallel))  # generations one replica runs at once; match OLLAMA_NUM_PARALLEL
+        self._gate = asyncio.Semaphore(self.parallel)
         self.generation = 0  # part of the answer cache key; changes whenever the loaded model is dropped
 
     @property
@@ -177,9 +82,7 @@ class S1MiniEngine:
 
     @num_thread.setter
     def num_thread(self, count: int) -> None:
-        if count != self._threads:
-            self._set_threads(count)
-            self._threads = count
+        self._threads = count  # Display and persistence only; Ollama chooses its own threads.
 
     @property
     def ready(self) -> bool:
@@ -192,13 +95,23 @@ class S1MiniEngine:
         """Load the model now so the first request does not pay for it."""
         await asyncio.to_thread(self._base_model)
 
-    def _base_model(self) -> Loaded:
+    def _base_model(self) -> Any:
         with self._load_lock:
             if self._base is None:
                 self._base = self._loader(self.model)
             return self._base
 
     def _events(self, text: str, styling: str, structure: str, context: str, stop: threading.Event) -> Iterator[tuple[str, Any]]:
+        """Invalidate unavailable handles and return an actionable public error."""
+        try:
+            yield from self._generate_events(text, styling, structure, context, stop)
+        except EngineError as error:
+            if error.status == 503:
+                self._forget()
+                raise EngineError("Model unavailable; start Ollama and ask an admin to press Download on the Updates card.", 503) from None
+            raise
+
+    def _generate_events(self, text: str, styling: str, structure: str, context: str, stop: threading.Event) -> Iterator[tuple[str, Any]]:
         """("sentence", text with the whitespace after it) as sentences complete, then ("done", stats)."""
         loaded = self._base_model()
         parts = chunks(text, loaded.count, self.chunk_tokens)
@@ -243,7 +156,7 @@ class S1MiniEngine:
             finally:
                 stop.set()  # a running `next` then ends by itself; closing the generator here could race with it
 
-    # Updates: the Hub revision of the weights, shared by all replicas through one models volume.
+    # Updates: Ollama digests; data-volume marker invalidates every replica cache.
 
     async def cached_sha(self) -> str | None:
         return await asyncio.to_thread(self._cached_sha_of, self.model)
@@ -255,7 +168,10 @@ class S1MiniEngine:
         await asyncio.to_thread(self._download_of, self.model)
 
     async def unload(self) -> None:
-        """Forget the loaded model here and tell the other replicas to do the same; the next call loads the new weights."""
+        """Invalidate this replica and publish a marker without blocking the event loop."""
+        await asyncio.to_thread(self._unload)
+
+    def _unload(self) -> None:
         if self._marker is not None:
             self._marker.parent.mkdir(parents=True, exist_ok=True)
             self._seen = uuid.uuid4().hex
