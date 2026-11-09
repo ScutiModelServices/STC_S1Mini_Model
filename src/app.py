@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
+from disconnect import CallerGone, Measure, first_piece
 from cache import AnswerCache
 from engine import CONTEXTS, STRUCTURES, STYLINGS, EngineError, S1MiniEngine, default_marker
 from ollama_backend import engine_from_env
@@ -246,7 +247,7 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
         yield line({"type": "done", **result})
 
     @app.post("/v1/normalize")
-    async def normalize(body: NormalizeRequest, response: Response, _auth: None = Depends(authorize),
+    async def normalize(body: NormalizeRequest, request: Request, response: Response, _auth: None = Depends(authorize),
                         _slot: None = Depends(slot)) -> Any:
         started = time.perf_counter()
         size = cache_limit()
@@ -263,7 +264,10 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
             if body.stream:
                 events = client.normalize_stream(*args)
                 try:
-                    first = await anext(events, None)  # the first sentence is waited for here, so a refusal is still an HTTP error
+                    first = await first_piece(request, events, None)  # the first sentence is waited for here, so a refusal is still an HTTP error
+                except CallerGone:
+                    await events.aclose()
+                    return Response(status_code=499)  # nobody is listening; the generation is already stopped
                 except BaseException:
                     await events.aclose()
                     raise
@@ -345,16 +349,8 @@ def create_app(client: S1MiniEngine | None = None, admin_password: str | None = 
 
     latency = LatencyHistogram()
 
-    @app.middleware("http")
-    async def measure(request: Request, call_next):
-        started = time.perf_counter()
-        response = await call_next(request)
-        if request.url.path.startswith("/v1/"):
-            latency.observe(time.perf_counter() - started)
-        token_id = getattr(request.state, "token_id", None)
-        if token_id:
-            await run_in_threadpool(tokens.record, token_id, (time.perf_counter() - started) * 1000, response.status_code >= 500)
-        return response
+    app.add_middleware(Measure, observe=latency.observe,
+                       record=lambda token_id, ms, failed: run_in_threadpool(tokens.record, token_id, ms, failed))
 
     @app.get("/metrics", dependencies=[Depends(admin)])
     def metrics() -> PlainTextResponse:
