@@ -4,7 +4,7 @@
 
 **Group:** Speech Text Cleanup
 
-**Tags:** `cpu`, `streaming`
+**Tags:** `cpu`, `streaming`, `host-threads`
 
 | | |
 |---|---|
