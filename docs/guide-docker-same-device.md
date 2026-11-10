@@ -24,7 +24,7 @@ Copy `.env.example` to `.env`. Saved admin values beat environment values.
 | `SERVICE_OLLAMA_PARALLEL` | `2` | Generations one replica runs at once; set it to the `OLLAMA_NUM_PARALLEL` of your Ollama. |
 | `SERVICE_REPLICAS` | `1` | API replicas sharing Ollama model memory. |
 | `SERVICE_MEM_LIMIT` | `0` | Optional per-API memory cap; Ollama memory is separate. |
-| `SERVICE_NUM_THREAD` | empty | Saved/displayed only; Ollama chooses its own threads. |
+| `SERVICE_NUM_THREAD` | empty | Saved and sent to Ollama as `num_thread` with every request; unset lets Ollama decide. Set it to the physical core count. |
 
 Admin settings cover update interval, in-flight cap (0 = 4), cache size (256; 0 disables),
 input tokens per pass (800), warm-up and Ollama URL/model. Tokenizer source/revision are fixed.

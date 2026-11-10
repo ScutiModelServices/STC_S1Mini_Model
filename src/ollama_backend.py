@@ -73,6 +73,7 @@ class OllamaLoaded:
 
     def __init__(self, url: str, model: str, tokenizer: Any = None, load_timeout: float = 15.0) -> None:
         self.url, self.model = url.rstrip("/"), model
+        self.num_thread: int | None = None  # CPU threads Ollama uses per request; None = Ollama decides
         self.tokenizer = tokenizer
         with _call(self.url, "/api/generate", {"model": model, "prompt": "", "stream": False,
                                              "options": self._options()}, load_timeout) as response:
@@ -85,6 +86,8 @@ class OllamaLoaded:
 
     def _options(self) -> dict[str, Any]:
         options = {"temperature": 0, "repeat_penalty": 1.0, "num_ctx": 4096, "num_gpu": 0}
+        if self.num_thread:
+            options["num_thread"] = self.num_thread
         return options
 
     @staticmethod

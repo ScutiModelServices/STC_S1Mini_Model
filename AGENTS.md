@@ -16,7 +16,7 @@ This file is the one instruction file for every coding agent; `CLAUDE.md` only i
 - `web/index.html`, `src/tokens.py`, `src/settings.py`, `src/updates.py` and `.dockerignore` are copies shared with the other model services. Change one, copy it to the others, run `python tools/check_sync.py` in each repo.
 - Ollama is the only backend (`src/ollama_backend.py`); keep injected fake loaders for protocol tests.
 - Preserve the exact S1-mini by Superwhisper system prompt/control line, greedy decoding, sentence chunking and cancellation. `tokenizers` loads the fixed pinned vocabulary; raw generation uses the exact Qwen3 non-thinking template.
-- CPU threads are saved/displayed only; Ollama chooses its own threads. Empty URL fails; backend outages keep health/admin available with actionable 503 errors.
+- CPU threads are sent to Ollama as `num_thread` with every request; unset lets Ollama decide. Set it to the physical core count. Empty URL fails; backend outages keep health/admin available with actionable 503 errors.
 - Behaviour changes update `README.md`, `deployment.md`, `docs/guide-web-ui.md`, `.env.example` and `CHANGELOG.md` in the same commit.
 - Never read or print `.env`, `.env.local`, `.env.compose`, `tokens.json` or `settings.json`.
 - Commit with the noreply author email `214214011+scutiii2@users.noreply.github.com` (another address is rejected on push). Push `main`, then run `python tools/publish_live.py`. Build Docker only when the Dockerfile or the dependencies changed.

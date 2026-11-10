@@ -102,7 +102,10 @@ def test_exact_prompt_greedy_options_and_counts(server):
     assert seen[-1]["raw"] is True
     assert seen[-1]["options"] == {"temperature": 0, "num_predict": 12, "repeat_penalty": 1.0,
                                    "num_ctx": 4096, "num_gpu": 0}
-    assert "num_thread" not in seen[-1]["options"]
+    assert "num_thread" not in seen[-1]["options"]  # unset: Ollama decides
+    model.num_thread = 3
+    list(model.stream(messages, 12, 5, threading.Event()))
+    assert seen[-1]["options"]["num_thread"] == 3
 
 
 def test_chunk_completion_never_sets_callers_stop_and_close_stops_only_current_chunk(server):

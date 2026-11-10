@@ -56,7 +56,7 @@ does not change the key.
 Settings card (update check hours, in-flight cap, answers kept, input tokens per pass), and the Updates card
 (**Check now** shows the local import digest with no online version; **Download** fetches the pinned tokenizer).
 The shared data-volume marker invalidates every replica's loaded handle and answer cache.
-CPU threads are saved/displayed only; Ollama chooses its own threads.
+CPU threads are sent to Ollama as `num_thread` with every request; unset lets Ollama decide. Set it to the physical core count.
 `/metrics` (admin password) is Prometheus text per token. `s1mini_request_seconds` is a histogram of how long each
 `/v1` call took on the replica that answers (to the first byte for a streamed reply); it starts from 0 when the
 replica restarts.

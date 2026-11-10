@@ -82,7 +82,9 @@ class S1MiniEngine:
 
     @num_thread.setter
     def num_thread(self, count: int) -> None:
-        self._threads = count  # Display and persistence only; Ollama chooses its own threads.
+        self._threads = count  # sent to Ollama as num_thread with the next request
+        if self._base is not None:
+            self._base.num_thread = count
 
     @property
     def ready(self) -> bool:
@@ -99,6 +101,7 @@ class S1MiniEngine:
         with self._load_lock:
             if self._base is None:
                 self._base = self._loader(self.model)
+                self._base.num_thread = self._threads
             return self._base
 
     def _events(self, text: str, styling: str, structure: str, context: str, stop: threading.Event) -> Iterator[tuple[str, Any]]:

@@ -37,7 +37,7 @@ uv run python src/app.py
 ```
 
 Health/admin start during outages; readiness stays false and calls return 503 with a admin Updates Download hint.
-The next request retries. CPU threads are saved/displayed only; Ollama chooses its own threads.
+The next request retries. CPU threads are sent to Ollama as `num_thread` with every request; unset lets Ollama decide. Set it to the physical core count.
 API replicas have independent queues/caches and share Ollama model memory.
 
 ## Updates and verification

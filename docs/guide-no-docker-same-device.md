@@ -32,7 +32,7 @@ uv run python src/app.py
 | `SERVICE_OLLAMA_MODEL` | `s1-mini:f16` | Installed model. |
 | `SERVICE_OLLAMA_PARALLEL` | `2` | Generations one replica runs at once; match `OLLAMA_NUM_PARALLEL` on your Ollama. |
 | `SERVICE_WARM` | `1` | Load the model at start; with `0` the first request pays the load time. |
-| `SERVICE_NUM_THREAD` | empty | Saved display value only; Ollama chooses its own threads. |
+| `SERVICE_NUM_THREAD` | empty | Saved and sent to Ollama as `num_thread` with every request; unset lets Ollama decide. Set it to the physical core count. |
 | `SERVICE_MODELS_DIR` | the library's default cache | Local tokenizer cache override through `HF_HOME`; a real `HF_HOME` wins. Does not configure an already-running Ollama server cache. |
 
 PowerShell: `$env:SERVICE_ADMIN_PASSWORD = "secret"; .\run.bat`

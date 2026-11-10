@@ -55,8 +55,9 @@ Tokens are enforced only while `SERVICE_ADMIN_PASSWORD` is set.
 
 ## CPU threads
 
-This card saves/displays 1 to 256 and synchronizes replicas. It has no generation effect:
-Ollama chooses its own threads. Configure Ollama on its host. Saved value beats `SERVICE_NUM_THREAD`.
+This card saves 1 to 256, synchronizes replicas and sends the value to Ollama as `num_thread` with every request;
+unset lets Ollama decide. Ollama reloads the model once when the value changes, so that first answer is slower.
+Set it to the physical core count. Saved value beats `SERVICE_NUM_THREAD`.
 
 ## Replicas and parallel requests (read-only)
 
